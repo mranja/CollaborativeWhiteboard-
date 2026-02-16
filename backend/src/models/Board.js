@@ -3,14 +3,18 @@ const mongoose = require('mongoose');
 const ElementSchema = new mongoose.Schema({
   id: String,
   type: String,
-  x: Number,
-  y: Number,
-  width: Number,
-  height: Number,
+  x: { type: Number, default: 0 },
+  y: { type: Number, default: 0 },
+  width: { type: Number, default: 0 },
+  height: { type: Number, default: 0 },
   rotation: { type: Number, default: 0 },
-  stroke: String,
-  fill: String,
+  scaleX: { type: Number, default: 1 },
+  scaleY: { type: Number, default: 1 },
+  stroke: { type: String, default: '#000000' },
+  strokeWidth: { type: Number, default: 2 },
+  fill: { type: String, default: 'transparent' },
   text: String,
+  points: [Number], // For lines/pencil
   meta: Object
 }, { _id: false });
 

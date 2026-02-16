@@ -1,5 +1,9 @@
 const Board = require('../models/Board');
 const Version = require('../models/Version');
+const Invite = require('../models/Invite');
+const User = require('../models/User');
+const { sendInviteEmail } = require('../utils/email');
+const crypto = require('crypto');
 
 exports.listUserBoards = async (req, res) => {
   try {
@@ -24,10 +28,26 @@ exports.listUserBoards = async (req, res) => {
 
 exports.createBoard = async (req, res) => {
   const { title } = req.body;
+  
+  // Input validation
+  if (!title || !title.trim()) {
+    return res.status(400).json({ message: 'Board title is required' });
+  }
+  
+  if (title.trim().length > 100) {
+    return res.status(400).json({ message: 'Board title must be less than 100 characters' });
+  }
+  
   try {
-    const board = await Board.create({ title, owner: req.user.id });
+    const board = await Board.create({ 
+      title: title.trim(), 
+      owner: req.user.id 
+    });
     res.json(board);
-  } catch (err) { res.status(500).json({ message: err.message }); }
+  } catch (err) { 
+    console.error('Create board error:', err);
+    res.status(500).json({ message: err.message }); 
+  }
 };
 
 exports.getBoard = async (req, res) => {
@@ -51,38 +71,89 @@ exports.getVersions = async (req, res) => {
 
 exports.invite = async (req, res) => {
   const { boardId } = req.params;
-  let { userId, role } = req.body;
+  const { email, role } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required' });
+  }
+  
   try {
     const board = await Board.findById(boardId);
     if (!board) return res.status(404).json({ message: 'Board not found' });
     
     // Only owner can invite
-    if (board.owner.toString() !== req.user.id) {
+    if (board.owner.toString() !== req.user.id.toString()) {
       return res.status(403).json({ message: 'Only board owner can invite' });
     }
-    
-    // If userId is an email, find the user by email
-    if (userId && userId.includes('@')) {
-      const User = require('../models/User');
-      const user = await User.findOne({ email: userId });
-      if (!user) {
-        return res.status(404).json({ message: 'User not found. Please provide valid email.' });
-      }
-      userId = user._id;
-    }
+
+    // Check if user already has an account
+    const existingUser = await User.findOne({ email });
     
     // Check if already a collaborator
-    const alreadyCollab = board.collaborators.some(c => c.user.toString() === userId.toString());
-    if (alreadyCollab) {
-      return res.status(400).json({ message: 'User is already a collaborator' });
+    if (existingUser) {
+      const alreadyCollab = board.collaborators.some(c => c.user.toString() === existingUser._id.toString());
+      if (alreadyCollab || board.owner.toString() === existingUser._id.toString()) {
+        return res.status(400).json({ message: 'User is already part of the board' });
+      }
     }
+
+    // Create invite token
+    const token = crypto.randomBytes(32).toString('hex');
     
-    board.collaborators.push({ user: userId, role: role || 'editor' });
-    await board.save();
-    res.json(board);
+    // Save invite to DB
+    await Invite.create({
+      board: boardId,
+      email,
+      role: role || 'editor',
+      token,
+      invitedBy: req.user.id
+    });
+
+    // Send email
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const inviteLink = `${frontendUrl}/invite/accept/${token}`;
+    const inviterName = req.user.name;
+
+    await sendInviteEmail(email, board.title, inviteLink, inviterName);
+
+    res.json({ message: 'Invite sent successfully to ' + email });
   } catch (err) { 
     console.error('Invite error:', err);
     res.status(500).json({ message: err.message || 'Failed to invite' });
+  }
+};
+
+exports.acceptInvite = async (req, res) => {
+  const { token } = req.params;
+  
+  try {
+    const invite = await Invite.findOne({ token, status: 'pending' });
+    if (!invite) {
+      return res.status(404).json({ message: 'Invalid or expired invitation' });
+    }
+
+    const board = await Board.findById(invite.board);
+    if (!board) {
+      return res.status(404).json({ message: 'Board no longer exists' });
+    }
+
+    // User must be logged in to accept, and the email must match or we just add the current user
+    const userId = req.user.id;
+    
+    // Add user as collaborator
+    const alreadyCollab = board.collaborators.some(c => c.user.toString() === userId);
+    if (!alreadyCollab && board.owner.toString() !== userId) {
+      board.collaborators.push({ user: userId, role: invite.role });
+      await board.save();
+    }
+
+    invite.status = 'accepted';
+    await invite.save();
+
+    res.json({ message: 'Invitation accepted', boardId: board._id });
+  } catch (err) {
+    console.error('Accept invite error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 

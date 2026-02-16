@@ -4,12 +4,12 @@ import ToolButton from '../ui/ToolButton'
 import { AiOutlineSelect, AiOutlineEdit, AiOutlineHighlight, AiOutlineBorder, AiOutlineLine, AiOutlineFontSize } from 'react-icons/ai'
 
 const tools = [
-  { id: 'select', label: 'Select', icon: <AiOutlineSelect /> },
-  { id: 'pen', label: 'Pen', icon: <AiOutlineEdit /> },
-  { id: 'eraser', label: 'Eraser', icon: <AiOutlineHighlight /> },
-  { id: 'rect', label: 'Rect', icon: <AiOutlineBorder /> },
-  { id: 'line', label: 'Line', icon: <AiOutlineLine /> },
-  { id: 'text', label: 'Text', icon: <AiOutlineFontSize /> }
+  { id: 'select', label: 'Select (V)', icon: <AiOutlineSelect /> },
+  { id: 'pen', label: 'Pen (P)', icon: <AiOutlineEdit /> },
+  { id: 'eraser', label: 'Eraser (E)', icon: <AiOutlineHighlight /> },
+  { id: 'rect', label: 'Rectangle (R)', icon: <AiOutlineBorder /> },
+  { id: 'line', label: 'Line (L)', icon: <AiOutlineLine /> },
+  { id: 'text', label: 'Text (T)', icon: <AiOutlineFontSize /> }
 ]
 
 export default function SidebarToolbar() {

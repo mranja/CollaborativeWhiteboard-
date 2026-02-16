@@ -19,7 +19,7 @@ exports.register = async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hash });
     const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
-    res.json({ user: { id: user._id, name: user.name, email: user.email }, token });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar }, token });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ message: err.message || 'Registration failed' });
@@ -41,9 +41,25 @@ exports.login = async (req, res) => {
     if (!ok) return res.status(401).json({ message: 'Invalid email or password' });
     
     const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
-    res.json({ user: { id: user._id, name: user.name, email: user.email }, token });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar }, token });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: err.message || 'Login failed' });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, avatar } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    if (name) user.name = name;
+    if (avatar !== undefined) user.avatar = avatar;
+    
+    await user.save();
+    res.json({ user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
