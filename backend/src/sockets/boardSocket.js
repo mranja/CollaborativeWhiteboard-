@@ -73,7 +73,14 @@ module.exports = (io) => {
         console.warn(`User ${userId} attempted to draw but is ${userRole}`);
         return;
       }
-      socket.to(currentRoom).emit('draw-element', op);
+      // Broadcast to other users, including the drawer's identity
+      socket.to(currentRoom).emit('draw-element', { ...op, userId });
+    });
+
+    socket.on('drawing-preview', (op) => {
+      if (!currentRoom) return;
+      if (!canEdit()) return;
+      socket.to(currentRoom).emit('drawing-preview', { ...op, userId });
     });
 
     socket.on('update-element', (op) => {

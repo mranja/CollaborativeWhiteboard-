@@ -65,13 +65,21 @@ boardSocket(io);
 
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/whiteboard', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(()=>{
-  console.log('MongoDB connected');
-  server.listen(PORT, ()=>console.log(`Server listening on ${PORT}`));
-}).catch(err=>{
-  console.error('MongoDB connection error', err);
-  process.exit(1);
+const connectDB = async () => {
+  const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/whiteboard';
+  console.log(`📡 Attempting to connect to MongoDB: ${uri.split('@').pop()}`);
+  try {
+    await mongoose.connect(uri);
+    console.log('✅ MongoDB connected successfully');
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err.message);
+    console.log('⚠️ Running in disconnected mode (features will be limited)');
+  }
+};
+
+connectDB().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 Server listening on port ${PORT}`);
+    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  });
 });

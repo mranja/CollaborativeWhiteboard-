@@ -8,6 +8,7 @@ router.post('/', auth, boardCtrl.createBoard);
 router.get('/:id', auth, boardCtrl.getBoard);
 router.get('/:boardId/versions', auth, boardCtrl.getVersions);
 router.post('/:boardId/invite', auth, boardCtrl.invite);
+router.post('/invite/accept/:token', auth, boardCtrl.acceptInvite);
 router.post('/:boardId/version', auth, boardCtrl.saveVersion);
 
 module.exports = router;

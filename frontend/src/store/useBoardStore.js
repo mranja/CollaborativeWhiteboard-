@@ -7,12 +7,28 @@ const useBoardStore = create((set) => ({
   currentTool: 'select',
   currentUser: null,
   
+  // Tool Settings
+  strokeColor: '#8b5cf6', // Default purple from our design system
+  strokeWidth: 4,
+  fillColor: 'transparent',
+  
   setCurrentUser: (user) => set({ currentUser: user }),
   setCurrentTool: (tool) => set({ currentTool: tool }),
-  setBoard: (id) => set({ boardId: id, elements: [] }),
+  setStrokeColor: (color) => set({ strokeColor: color }),
+  setStrokeWidth: (width) => set({ strokeWidth: width }),
+  setFillColor: (color) => set({ fillColor: color }),
+  
+  setBoard: (id, initialElements = []) => set({ boardId: id, elements: initialElements }),
+  
   addElement: (el) => set(state => ({ elements: [...state.elements, el] })),
-  updateElement: (el) => set(state => ({ elements: state.elements.map(e => e.id === el.id ? { ...e, ...el } : e) })),
-  deleteElement: (id) => set(state => ({ elements: state.elements.filter(e => e.id !== id) })),
+  
+  updateElement: (el) => set(state => ({ 
+    elements: state.elements.map(e => e.id === el.id ? { ...e, ...el } : e) 
+  })),
+  
+  deleteElement: (id) => set(state => ({ 
+    elements: state.elements.filter(e => e.id !== id) 
+  })),
   
   updateLiveCursor: (userId, x, y, name, color) => set((state) => ({
     liveCursors: {
