@@ -11,6 +11,11 @@ const boardSocket = require('./sockets/boardSocket');
 dotenv.config();
 const app = express();
 
+// Ensure critical config
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  JWT_SECRET is not set. Socket and API authentication will fail or be insecure.');
+}
+
 // CORS configuration - restrict to frontend URL in production
 const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -73,7 +78,13 @@ const connectDB = async () => {
     console.log('✅ MongoDB connected successfully');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
-    console.log('⚠️ Running in disconnected mode (features will be limited)');
+    // Allow running without DB only if explicitly allowed via env
+    if (process.env.ALLOW_NO_DB && process.env.ALLOW_NO_DB === 'true') {
+      console.log('⚠️ Running in disconnected mode (features will be limited)');
+      return
+    }
+    // otherwise fail startup to avoid running in a broken state
+    throw err
   }
 };
 
