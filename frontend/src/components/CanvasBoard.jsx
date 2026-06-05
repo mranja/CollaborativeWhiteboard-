@@ -36,6 +36,7 @@ const ImageComponent = ({ element, currentTool, isViewer, onElementClick, onDrag
 }
 
 const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+const BOARD_SOCKET_URL = `${SOCKET_URL.replace(/\/$/, '')}/board`
 const USER_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
 
 const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, theme = 'dark' }, ref) => {
@@ -113,10 +114,11 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
   useEffect(() => {
     const token = getSocketToken()
     if (!token) return
-    const s = io(SOCKET_URL, { auth: { token } })
+    const s = io(BOARD_SOCKET_URL, { auth: { token } })
     setSocket(s)
     onSocketChange?.(s)
     s.on('connect', () => s.emit('join-board', { boardId }))
+    s.on('board-error', (payload) => console.error('Board socket error:', payload.message))
     s.on('draw-element', (op) => {
       addElement(op.element)
       setPreviewElements(prev => {
@@ -289,7 +291,7 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
       const size = 10
       for (let i = -size/2; i <= size/2; i += 5) {
         for (let j = -size/2; j <= size/2; j += 5) {
-          const shape = stage.getIntersection({ x: relPos.x + i, y: relPos.y + j })
+          const shape = stage.getIntersection({ x: rawPos.x + i, y: rawPos.y + j })
           if (shape && shape.id() && shape.name() !== 'grid') {
             deleteElement(shape.id())
             socket?.emit('delete-element', { elementId: shape.id() })
@@ -523,7 +525,12 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
           value={textEditValue}
           onChange={(e) => setTextEditValue(e.target.value)}
           onBlur={handleTextSubmit}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleTextSubmit() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleTextSubmit()
+            }
+          }}
           style={{
             position: 'absolute',
             top: textEditPos.y,

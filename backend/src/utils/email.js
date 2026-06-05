@@ -1,13 +1,17 @@
 const nodemailer = require('nodemailer');
 
 const sendInviteEmail = async (email, boardTitle, inviteLink, inviterName) => {
-  // Use etheral for test if no real credentials
+  if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('Email is not configured. Invite link:', inviteLink);
+    return false;
+  }
+
   const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+    host: process.env.EMAIL_HOST,
     port: process.env.EMAIL_PORT || 587,
     auth: {
-      user: process.env.EMAIL_USER || 'placeholder@ethereal.email',
-      pass: process.env.EMAIL_PASS || 'password'
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
     }
   });
 
@@ -16,7 +20,7 @@ const sendInviteEmail = async (email, boardTitle, inviteLink, inviterName) => {
     to: email,
     subject: `Join ${inviterName} on Flowboard: ${boardTitle}`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px">
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px">
         <h2 style="color: #4f46e5">You're Invited to Collaborate!</h2>
         <p>Hello,</p>
         <p><strong>${inviterName}</strong> has invited you to collaborate on the whiteboard: <strong>${boardTitle}</strong>.</p>
@@ -26,7 +30,7 @@ const sendInviteEmail = async (email, boardTitle, inviteLink, inviterName) => {
         </div>
         <p style="color: #64748b; font-size: 12px">This link will expire in 7 days.</p>
         <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0" />
-        <p style="color: #94a3b8; font-size: 10px; text-align: center">© 2026 Flowboard | Creativity in Real-time</p>
+        <p style="color: #94a3b8; font-size: 10px; text-align: center">&copy; 2026 Flowboard | Creativity in Real-time</p>
       </div>
     `
   };

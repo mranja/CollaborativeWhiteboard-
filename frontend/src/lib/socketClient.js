@@ -3,6 +3,8 @@ import debounce from 'lodash.debounce'
 
 let socket = null
 const CLIENT_KEY = 'cw_client_id'
+const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+const BOARD_SOCKET_URL = `${SOCKET_URL.replace(/\/$/, '')}/board`
 
 function getClientId() {
   let id = null
@@ -21,7 +23,7 @@ function getClientId() {
 export function connectSocket(token) {
   if (socket) return socket
   const clientId = getClientId()
-  socket = io(process.env.VITE_BACKEND_URL || 'http://localhost:5000', {
+  socket = io(BOARD_SOCKET_URL, {
     auth: { token, clientId },
     transports: ['websocket']
   })

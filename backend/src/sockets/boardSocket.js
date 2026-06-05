@@ -1,5 +1,37 @@
 const Board = require('../models/Board')
 const jwt = require('jsonwebtoken');
+const { canEditBoard, getBoardRole } = require('../utils/boardAccess');
+
+const allowedElementFields = [
+  'type',
+  'x',
+  'y',
+  'width',
+  'height',
+  'rotation',
+  'scaleX',
+  'scaleY',
+  'stroke',
+  'strokeWidth',
+  'fill',
+  'text',
+  'src',
+  'points',
+  'meta'
+];
+
+const buildElementSet = (element = {}) => (
+  allowedElementFields.reduce((updates, field) => {
+    if (element[field] !== undefined) {
+      updates[`elements.$.${field}`] = element[field];
+    }
+    return updates;
+  }, {})
+);
+
+const acknowledge = (ack, payload) => {
+  if (typeof ack === 'function') ack(payload);
+};
 
 module.exports = (io) => {
   const nsp = io.of('/board');
@@ -14,9 +46,12 @@ module.exports = (io) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-      socket.userId = decoded.userId;
+      socket.userId = decoded.userId || decoded.id;
       socket.userName = decoded.name;
       socket.userEmail = decoded.email;
+      if (!socket.userId) {
+        return next(new Error('Authentication error: Invalid token payload'));
+      }
       next();
     } catch (err) {
       console.error('Socket auth error:', err.message);
@@ -27,54 +62,92 @@ module.exports = (io) => {
   nsp.on('connection', (socket) => {
     let currentRoom = null;
     let currentBoardId = null;
-    let userRole = 'viewer'; // default to viewer
+    let userRole = null;
     
     // Extract userId and name from authenticated socket
     const userId = socket.userId;
     const name = socket.userName;
 
-    socket.on('join-board', async ({ boardId }) => {
-      if (currentRoom) socket.leave(currentRoom);
-      
-      currentRoom = `board_${boardId}`;
-      currentBoardId = boardId;
+    socket.on('join-board', async ({ boardId } = {}, ack) => {
+      if (currentRoom) {
+        socket.to(currentRoom).emit('user-left', { userId });
+        socket.leave(currentRoom);
+      }
+      currentRoom = null;
+      currentBoardId = null;
+      userRole = null;
       
       // Determine user role from board
       try {
         const board = await Board.findById(boardId);
-        if (board.owner.toString() === userId) {
-          userRole = 'owner';
-        } else {
-          const collab = board.collaborators.find(c => c.user.toString() === userId);
-          userRole = collab?.role || 'viewer';
+        if (!board) {
+          acknowledge(ack, { ok: false, message: 'Board not found' });
+          socket.emit('board-error', { message: 'Board not found' });
+          return;
         }
+
+        userRole = getBoardRole(board, userId);
+        if (!userRole) {
+          acknowledge(ack, { ok: false, message: 'You do not have access to this board' });
+          socket.emit('board-error', { message: 'You do not have access to this board' });
+          return;
+        }
+
+        currentRoom = `board_${boardId}`;
+        currentBoardId = boardId;
+        socket.join(currentRoom);
+        socket.to(currentRoom).emit('user-joined', { userId, name });
+        acknowledge(ack, { ok: true, role: userRole });
       } catch (err) {
         console.error('Error fetching board role:', err);
-        userRole = 'viewer';
+        acknowledge(ack, { ok: false, message: 'Unable to join board' });
+        socket.emit('board-error', { message: 'Unable to join board' });
       }
-      
-      socket.join(currentRoom);
-      socket.to(currentRoom).emit('user-joined', { userId, name });
     });
 
     socket.on('leave-board', ({ boardId }) => {
       const room = `board_${boardId}`;
-      socket.leave(room);
       socket.to(room).emit('user-left', { userId });
+      socket.leave(room);
+
+      if (currentRoom === room) {
+        currentRoom = null;
+        currentBoardId = null;
+        userRole = null;
+      }
     });
 
     // Helper to check if user can edit
-    const canEdit = () => userRole !== 'viewer';
+    const canEdit = () => canEditBoard(userRole);
 
     // draw operations are operation-based and broadcast to room
-    socket.on('draw-element', (op) => {
-      if (!currentRoom) return;
-      if (!canEdit()) {
-        console.warn(`User ${userId} attempted to draw but is ${userRole}`);
+    socket.on('draw-element', async (op = {}, ack) => {
+      if (!currentRoom) {
+        acknowledge(ack, { ok: false, message: 'Join a board before drawing' });
         return;
       }
-      // Broadcast to other users, including the drawer's identity
-      socket.to(currentRoom).emit('draw-element', { ...op, userId });
+      if (!canEdit()) {
+        console.warn(`User ${userId} attempted to draw but is ${userRole}`);
+        acknowledge(ack, { ok: false, message: 'You do not have permission to edit this board' });
+        return;
+      }
+      if (!op.element?.id) {
+        acknowledge(ack, { ok: false, message: 'Element id is required' });
+        return;
+      }
+
+      try {
+        await Board.updateOne(
+          { _id: currentBoardId, 'elements.id': { $ne: op.element.id } },
+          { $push: { elements: op.element }, $set: { updatedAt: new Date() } }
+        );
+        socket.to(currentRoom).emit('draw-element', { ...op, userId });
+        acknowledge(ack, { ok: true });
+      } catch (err) {
+        console.error('Persist draw error:', err);
+        acknowledge(ack, { ok: false, message: 'Could not save drawing change' });
+        socket.emit('board-error', { message: 'Could not save drawing change' });
+      }
     });
 
     socket.on('drawing-preview', (op) => {
@@ -83,22 +156,68 @@ module.exports = (io) => {
       socket.to(currentRoom).emit('drawing-preview', { ...op, userId });
     });
 
-    socket.on('update-element', (op) => {
-      if (!currentRoom) return;
+    socket.on('update-element', async (op = {}, ack) => {
+      if (!currentRoom) {
+        acknowledge(ack, { ok: false, message: 'Join a board before updating' });
+        return;
+      }
       if (!canEdit()) {
         console.warn(`User ${userId} attempted to update but is ${userRole}`);
+        acknowledge(ack, { ok: false, message: 'You do not have permission to edit this board' });
         return;
       }
-      socket.to(currentRoom).emit('update-element', op);
+      if (!op.element?.id) {
+        acknowledge(ack, { ok: false, message: 'Element id is required' });
+        return;
+      }
+
+      const elementSet = buildElementSet(op.element);
+      if (Object.keys(elementSet).length === 0) {
+        acknowledge(ack, { ok: false, message: 'No supported element fields to update' });
+        return;
+      }
+
+      try {
+        await Board.updateOne(
+          { _id: currentBoardId, 'elements.id': op.element.id },
+          { $set: { ...elementSet, updatedAt: new Date() } }
+        );
+        socket.to(currentRoom).emit('update-element', op);
+        acknowledge(ack, { ok: true });
+      } catch (err) {
+        console.error('Persist update error:', err);
+        acknowledge(ack, { ok: false, message: 'Could not save element update' });
+        socket.emit('board-error', { message: 'Could not save element update' });
+      }
     });
 
-    socket.on('delete-element', (op) => {
-      if (!currentRoom) return;
-      if (!canEdit()) {
-        console.warn(`User ${userId} attempted to delete but is ${userRole}`);
+    socket.on('delete-element', async (op = {}, ack) => {
+      if (!currentRoom) {
+        acknowledge(ack, { ok: false, message: 'Join a board before deleting' });
         return;
       }
-      socket.to(currentRoom).emit('delete-element', op);
+      if (!canEdit()) {
+        console.warn(`User ${userId} attempted to delete but is ${userRole}`);
+        acknowledge(ack, { ok: false, message: 'You do not have permission to edit this board' });
+        return;
+      }
+      if (!op.elementId) {
+        acknowledge(ack, { ok: false, message: 'Element id is required' });
+        return;
+      }
+
+      try {
+        await Board.updateOne(
+          { _id: currentBoardId },
+          { $pull: { elements: { id: op.elementId } }, $set: { updatedAt: new Date() } }
+        );
+        socket.to(currentRoom).emit('delete-element', op);
+        acknowledge(ack, { ok: true });
+      } catch (err) {
+        console.error('Persist delete error:', err);
+        acknowledge(ack, { ok: false, message: 'Could not delete element' });
+        socket.emit('board-error', { message: 'Could not delete element' });
+      }
     });
 
     socket.on('cursor-move', (payload) => {
@@ -109,7 +228,7 @@ module.exports = (io) => {
 
     socket.on('save-version', (payload) => {
       if (!currentRoom) return;
-      if (userRole !== 'owner') {
+      if (!canEdit()) {
         console.warn(`User ${userId} attempted to save version but is ${userRole}`);
         return;
       }
