@@ -3,7 +3,20 @@ const Version = require('../models/Version');
 const Invite = require('../models/Invite');
 const User = require('../models/User');
 const { sendInviteEmail } = require('../utils/email');
+const { canEditBoard, getBoardRole } = require('../utils/boardAccess');
 const crypto = require('crypto');
+
+const loadBoardForUser = async (boardId, userId, populate = false) => {
+  let query = Board.findById(boardId);
+  if (populate) {
+    query = query.populate('owner collaborators.user', 'name email');
+  }
+
+  const board = await query;
+  if (!board) return { board: null, role: null };
+
+  return { board, role: getBoardRole(board, userId) };
+};
 
 exports.listUserBoards = async (req, res) => {
   try {
@@ -52,15 +65,21 @@ exports.createBoard = async (req, res) => {
 
 exports.getBoard = async (req, res) => {
   try {
-    const board = await Board.findById(req.params.id).populate('owner collaborators.user', 'name email');
+    const { board, role } = await loadBoardForUser(req.params.id, req.user.id, true);
     if (!board) return res.status(404).json({ message: 'Board not found' });
-    res.json(board);
+    if (!role) return res.status(403).json({ message: 'You do not have access to this board' });
+
+    res.json({ ...board.toObject(), currentUserRole: role });
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
 exports.getVersions = async (req, res) => {
   try {
     const { boardId } = req.params;
+    const { board, role } = await loadBoardForUser(boardId, req.user.id);
+    if (!board) return res.status(404).json({ message: 'Board not found' });
+    if (!role) return res.status(403).json({ message: 'You do not have access to this board' });
+
     const versions = await Version.find({ board: boardId })
       .populate('createdBy', 'name')
       .sort({ versionNumber: -1 })
@@ -71,7 +90,8 @@ exports.getVersions = async (req, res) => {
 
 exports.invite = async (req, res) => {
   const { boardId } = req.params;
-  const { email, role } = req.body;
+  const email = req.body.email?.trim().toLowerCase();
+  const role = ['viewer', 'editor'].includes(req.body.role) ? req.body.role : 'editor';
   
   if (!email) {
     return res.status(400).json({ message: 'Email is required' });
@@ -104,7 +124,7 @@ exports.invite = async (req, res) => {
     await Invite.create({
       board: boardId,
       email,
-      role: role || 'editor',
+      role,
       token,
       invitedBy: req.user.id
     });
@@ -114,9 +134,15 @@ exports.invite = async (req, res) => {
     const inviteLink = `${frontendUrl}/invite/accept/${token}`;
     const inviterName = req.user.name;
 
-    await sendInviteEmail(email, board.title, inviteLink, inviterName);
+    const emailSent = await sendInviteEmail(email, board.title, inviteLink, inviterName);
 
-    res.json({ message: 'Invite sent successfully to ' + email });
+    res.json({
+      message: emailSent
+        ? 'Invite sent successfully to ' + email
+        : 'Invite created, but email delivery is not configured. Share the invite link manually.',
+      inviteLink,
+      emailSent
+    });
   } catch (err) { 
     console.error('Invite error:', err);
     res.status(500).json({ message: err.message || 'Failed to invite' });
@@ -161,10 +187,9 @@ exports.saveVersion = async (req, res) => {
   try {
     const { boardId } = req.params;
     const { snapshot } = req.body;
-    const board = await Board.findById(boardId);
+    const { board, role } = await loadBoardForUser(boardId, req.user.id);
     if (!board) return res.status(404).json({ message: 'Board not found' });
-    // only owner or editors can save versions
-    if (board.owner.toString() !== req.user.id && !board.collaborators.some(c => c.user.toString() === req.user.id && c.role === 'editor')) {
+    if (!canEditBoard(role)) {
       return res.status(403).json({ message: 'Forbidden' });
     }
     board.version += 1;

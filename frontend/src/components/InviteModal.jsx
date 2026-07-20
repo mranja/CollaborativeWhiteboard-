@@ -8,6 +8,7 @@ export default function InviteModal({ boardId, onClose, onInviteSent }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -18,13 +19,17 @@ export default function InviteModal({ boardId, onClose, onInviteSent }) {
     setLoading(true)
     setError('')
     setSuccess('')
+    setInviteLink('')
     
     try {
-      await boardAPI.invite(boardId, email, role)
-      setSuccess(`Successfully sent invitation to ${email}!`)
+      const res = await boardAPI.invite(boardId, email, role)
+      setSuccess(res.data.message || `Successfully sent invitation to ${email}!`)
+      setInviteLink(res.data.emailSent ? '' : res.data.inviteLink || '')
       setEmail('')
       if (onInviteSent) onInviteSent()
-      setTimeout(() => onClose(), 2000)
+      if (res.data.emailSent) {
+        setTimeout(() => onClose(), 2000)
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send invite. User may not exist.')
     } finally {
@@ -66,9 +71,19 @@ export default function InviteModal({ boardId, onClose, onInviteSent }) {
           )}
           
           {success && (
-            <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-2xl text-sm animate-fadeIn flex items-center space-x-2">
-               <FiCheckCircle className="flex-shrink-0" />
-               <span>{success}</span>
+            <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-2xl text-sm animate-fadeIn space-y-3">
+               <div className="flex items-center space-x-2">
+                 <FiCheckCircle className="flex-shrink-0" />
+                 <span>{success}</span>
+               </div>
+               {inviteLink && (
+                 <input
+                   readOnly
+                   value={inviteLink}
+                   onFocus={(e) => e.target.select()}
+                   className="w-full rounded-xl bg-black/20 border border-green-500/20 px-3 py-2 text-xs text-green-100 outline-none"
+                 />
+               )}
             </div>
           )}
           

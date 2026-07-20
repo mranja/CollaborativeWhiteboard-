@@ -7,7 +7,6 @@ import CollaboratorsList from '../components/CollaboratorsList'
 import InviteModal from '../components/InviteModal'
 import VersionHistoryModal from '../components/VersionHistoryModal'
 import useBoardStore from '../store/useBoardStore'
-import useAuthStore from '../store/useAuthStore'
 import { boardAPI } from '../api/client'
 import { 
   FiChevronLeft, 
@@ -32,7 +31,6 @@ export default function BoardPage() {
   const navigate = useNavigate()
   const canvasRef = useRef(null)
   
-  const user = useAuthStore(s => s.user)
   const setBoard = useBoardStore(s => s.setBoard)
   
   const [socket, setSocket] = useState(null)
@@ -59,26 +57,14 @@ export default function BoardPage() {
         
         setBoardTitle(res.data.title || 'Untitled')
         setBoard(id, res.data.elements || [])
-        
-        const currentUserId = user?.id || user?._id
-        const ownerId = res.data.owner?._id || res.data.owner
-        
-        if (ownerId && ownerId === currentUserId) {
-          setUserRole('owner')
-        } else {
-          const collab = res.data.collaborators?.find(c => {
-            const cid = c.user?._id || c.user
-            return cid === currentUserId
-          })
-          setUserRole(collab?.role || 'viewer')
-        }
+        setUserRole(res.data.currentUserRole || 'viewer')
       } catch (err) {
         console.error('Failed to fetch board:', err)
         navigate('/dashboard')
       }
     }
     fetchBoard()
-  }, [id, user, navigate, setBoard])
+  }, [id, navigate, setBoard])
 
   const handleExport = (format) => {
     canvasRef.current?.exportImage(format)

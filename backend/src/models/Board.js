@@ -14,6 +14,7 @@ const ElementSchema = new mongoose.Schema({
   strokeWidth: { type: Number, default: 2 },
   fill: { type: String, default: 'transparent' },
   text: String,
+  src: String,
   points: [Number], // For lines/pencil
   meta: Object
 }, { _id: false });

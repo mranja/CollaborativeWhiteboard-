@@ -16,6 +16,7 @@ if not exist "backend" (
 REM Start MongoDB if available
 echo.
 echo [1/3] Checking MongoDB...
+set BACKEND_COMMAND=npm run dev
 where mongod >nul 2>nul
 if %errorlevel% equ 0 (
     echo MongoDB found. Starting in background...
@@ -23,13 +24,14 @@ if %errorlevel% equ 0 (
     timeout /t 2 /nobreak
 ) else (
     echo MongoDB not found in PATH
-    echo Please start MongoDB manually or configure MONGO_URI to use MongoDB Atlas
+    echo Starting backend with temporary in-memory MongoDB
+    set BACKEND_COMMAND=npm run dev:memory
 )
 
 REM Start Backend
 echo.
 echo [2/3] Starting Backend on http://localhost:5000...
-start cmd /k "cd backend && npm run dev"
+start cmd /k "cd backend && %BACKEND_COMMAND%"
 timeout /t 3 /nobreak
 
 REM Start Frontend

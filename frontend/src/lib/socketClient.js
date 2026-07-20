@@ -4,6 +4,8 @@ import debounce from 'lodash.debounce'
 let socket = null
 const CLIENT_KEY = 'cw_client_id'
 const debouncers = new Map()
+const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+const BOARD_SOCKET_URL = `${SOCKET_URL.replace(/\/$/, '')}/board`
 
 function getClientId() {
   let id = null
@@ -25,6 +27,7 @@ export function connectSocket(token) {
   const base = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
   // connect to the /board namespace on the server
   socket = io(`${base}/board`, {
+  socket = io(BOARD_SOCKET_URL, {
     auth: { token, clientId },
     transports: ['websocket'],
     reconnectionAttempts: 5,

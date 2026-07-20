@@ -19,6 +19,7 @@ module.exports = async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     const user = await User.findById(payload.id || payload.userId);
     if (!user) return res.status(401).json({ message: 'Invalid token' });
     // normalize id to string to avoid ObjectId vs string comparison bugs
