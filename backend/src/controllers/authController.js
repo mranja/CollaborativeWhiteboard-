@@ -18,7 +18,11 @@ exports.register = async (req, res) => {
     
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hash });
-    const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not set; refusing to sign token');
+      return res.status(500).json({ message: 'Server misconfiguration' });
+    }
+    const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar }, token });
   } catch (err) {
     console.error('Register error:', err);
@@ -40,7 +44,11 @@ exports.login = async (req, res) => {
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ message: 'Invalid email or password' });
     
-    const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not set; refusing to sign token');
+      return res.status(500).json({ message: 'Server misconfiguration' });
+    }
+    const token = jwt.sign({ id: user._id, userId: user._id.toString(), name: user.name, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ user: { id: user._id, name: user.name, email: user.email, avatar: user.avatar }, token });
   } catch (err) {
     console.error('Login error:', err);

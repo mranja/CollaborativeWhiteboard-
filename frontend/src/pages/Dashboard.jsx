@@ -80,6 +80,19 @@ export default function Dashboard(){
     }
   }
 
+  const handleDeleteBoard = async (boardId) => {
+    if (!window.confirm('Are you sure you want to delete this board? This action cannot be undone.')) {
+      return
+    }
+    try {
+      await boardAPI.deleteBoard(boardId)
+      setBoards(boards.filter(b => b._id !== boardId))
+    } catch (err) {
+      console.error('Delete board error:', err)
+      setError(err.response?.data?.message || 'Failed to delete board')
+    }
+  }
+
   const handleLogout = () => {
     logout()
     navigate('/login')
@@ -101,68 +114,120 @@ export default function Dashboard(){
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-inter relative overflow-hidden">
-      {/* Background Decor */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-50 rounded-full blur-[120px] opacity-60" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[30%] h-[30%] bg-blue-50 rounded-full blur-[100px] opacity-40" />
-        <div className="absolute inset-0 opacity-[0.2]" 
-          style={{ backgroundImage: 'radial-gradient(circle, #cbd5e1 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-        />
-      </div>
-      
-      {/* Navigation */}
-      <nav className="relative z-50 px-4 md:px-8 h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between sticky top-0">
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center space-x-3 group cursor-pointer" 
-          onClick={() => navigate('/dashboard')}
-        >
-          <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform duration-300">
-            <FiWind className="w-5 h-5 md:w-6 md:h-6" />
-          </div>
-          <span className="text-lg md:text-xl font-black tracking-tight text-slate-900 uppercase">Flow<span className="text-indigo-600">board</span></span>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center space-x-3 md:space-x-6"
-        >
-          <div className="flex items-center space-x-2 md:space-x-3 bg-white px-3 md:px-4 py-1.5 md:py-2 rounded-xl border border-slate-100 shadow-sm">
-            <div className="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white text-[10px] md:text-xs font-black">
-              {user?.name?.charAt(0).toUpperCase()}
+    <div className="min-h-screen bg-white text-slate-900 font-inter selection:bg-indigo-100 selection:text-indigo-600">
+      {/* Subtle Board Grid Background */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.4]" 
+        style={{ backgroundImage: 'radial-gradient(circle, #e2e8f0 1.5px, transparent 1.5px)', backgroundSize: '40px 40px' }}
+      />
+      {/* --- NAV BAR --- */}
+      <nav className="fixed top-0 left-0 right-0 h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 z-[100] px-8">
+        <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
+          <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => navigate('/dashboard')}>
+            <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white transition-transform group-hover:rotate-6 shadow-xl shadow-slate-200">
+              <FiWind className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
-               <span className="text-[8px] md:text-[10px] font-black text-slate-400 leading-none uppercase tracking-widest">{user?.name}</span>
-               <span className="text-[7px] md:text-[9px] font-bold text-indigo-500 uppercase tracking-tighter">Pro Member</span>
+              <span className="text-xl font-black tracking-tight text-slate-900 uppercase leading-none">Flow<span className="text-indigo-600">board</span></span>
+              <span className="text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase mt-1">Idea Realtime Engine</span>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors bg-white rounded-xl border border-slate-100 hover:shadow-lg"
-            title="Logout"
-          >
-            <FiLogOut className="text-lg" />
-          </button>
-        </motion.div>
+          <div className="flex items-center space-x-4">
+            <button 
+              onClick={() => setShowProfileModal(!showProfileModal)}
+              className="flex items-center space-x-3 bg-slate-100 px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white text-xs font-black group-hover:rotate-12 transition-transform">
+                {user?.name?.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-sm font-bold text-slate-900 leading-none">{user?.name}</span>
+              <FiSettings className="w-4 h-4 text-indigo-500 group-hover:rotate-90 transition-transform duration-300" />
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="w-11 h-11 flex items-center justify-center text-slate-600 hover:text-rose-600 transition-colors bg-slate-100 hover:bg-rose-100 rounded-2xl border border-slate-200 hover:border-rose-300 shadow-sm hover:shadow-md"
+              title="Logout">
+              <FiLogOut className="text-lg" />
+            </button>
+          </div>
+        </div>
       </nav>
+      {/* Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowProfileModal(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white p-10 md:p-14 rounded-[3rem] max-w-md w-full shadow-3xl border border-slate-100 overflow-hidden"
+            >
+              <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-4 leading-none">Profile</h2>
+              <form onSubmit={handleUpdateProfile} className="space-y-8">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Full Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full h-14 px-6 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-lg text-slate-900 placeholder:text-slate-300"
+                    placeholder="Enter your name"
+                    required
+                  />
+                </div>
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Profile Picture URL</label>
+                  <input
+                    type="text"
+                    value={editAvatar}
+                    onChange={(e) => setEditAvatar(e.target.value)}
+                    className="w-full h-14 px-6 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-lg text-slate-900 placeholder:text-slate-300"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="flex gap-4 pt-6 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileModal(false)}
+                    className="flex-1 py-4 text-sm font-black text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-[0.2em]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdatingProfile}
+                    className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black shadow-2xl shadow-slate-200 hover:bg-indigo-600 transition-all disabled:opacity-50 active:scale-95"
+                  >
+                    {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-      <main className="relative z-10 px-4 md:px-8 py-12">
+      <main className="relative z-10 px-6 md:px-12 py-16 md:py-20">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-20 gap-8">
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
+              className="space-y-3"
             >
-              <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter mb-4 leading-none">
-                Your <span className="text-indigo-600 italic">Streams</span>
+              <h1 className="text-6xl md:text-7xl font-black text-slate-900 tracking-tighter leading-none">
+                Your <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Collections</span>
               </h1>
-              <p className="text-slate-400 font-medium text-lg">
-                {boards.length === 0 ? 'Initialize your first board' : `Managing ${boards.length} active flow${boards.length !== 1 ? 's' : ''}`}
+              <p className="text-slate-500 font-semibold text-lg tracking-wide">
+                {boards.length === 0 ? 'Start creating your first board' : `Exploring ${boards.length} active ${boards.length === 1 ? 'collection' : 'collections'}`}
               </p>
             </motion.div>
             
@@ -172,7 +237,7 @@ export default function Dashboard(){
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setShowCreateModal(true)}
-              className="bg-slate-900 text-white px-10 py-5 rounded-2xl text-base font-black shadow-2xl shadow-slate-200 hover:bg-indigo-600 transition-all flex items-center group"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-12 py-4 rounded-2xl font-semibold shadow-xl shadow-indigo-300/30 hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center group w-fit"
             >
               <FiPlus className="mr-3 text-xl group-hover:rotate-90 transition-transform duration-300" />
               <span>Launch Board</span>
@@ -216,13 +281,81 @@ export default function Dashboard(){
             ) : (
               <motion.div 
                 key="grid"
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-                initial="hidden"
-                animate="show"
-                variants={{
-                  show: { transition: { staggerChildren: 0.1 } }
-                }}
+                className="space-y-12"
               >
+                {/* Quick Stats */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="grid grid-cols-1 md:grid-cols-4 gap-4"
+                >
+                  <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 shadow-sm hover:shadow-lg transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Total Boards</p>
+                        <p className="text-3xl font-black text-slate-900 mt-2">{boards.length}</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                        <FiGrid className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-purple-50 to-white p-6 rounded-2xl border border-purple-100 shadow-sm hover:shadow-lg transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-purple-600 uppercase tracking-wider">Collaborators</p>
+                        <p className="text-3xl font-black text-slate-900 mt-2">{boards.reduce((sum, b) => sum + (b.collaborators?.length || 0), 0)}</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+                        <FiUsers className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-pink-50 to-white p-6 rounded-2xl border border-pink-100 shadow-sm hover:shadow-lg transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-pink-600 uppercase tracking-wider">Active Today</p>
+                        <p className="text-3xl font-black text-slate-900 mt-2">{boards.filter(b => {
+                          const updated = new Date(b.updatedAt)
+                          const today = new Date()
+                          return updated.toDateString() === today.toDateString()
+                        }).length}</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center text-pink-600">
+                        <FiActivity className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm hover:shadow-lg transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">This Month</p>
+                        <p className="text-3xl font-black text-slate-900 mt-2">{boards.filter(b => {
+                          const updated = new Date(b.updatedAt)
+                          const now = new Date()
+                          return updated.getMonth() === now.getMonth() && updated.getFullYear() === now.getFullYear()
+                        }).length}</p>
+                      </div>
+                      <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                        <FiClock className="w-6 h-6" />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Boards Grid */}
+                <motion.div 
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+                  initial="hidden"
+                  animate="show"
+                  variants={{
+                    show: { transition: { staggerChildren: 0.1 } }
+                  }}
+                >
                 {boards.map((board) => (
                   <motion.div
                     key={board._id}
@@ -231,37 +364,61 @@ export default function Dashboard(){
                       show: { opacity: 1, y: 0 }
                     }}
                     whileHover={{ y: -8 }}
-                    onClick={() => navigate(`/board/${board._id}`)}
-                    className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-xl shadow-slate-100/50 cursor-pointer group hover:border-indigo-400/30 hover:shadow-2xl transition-all duration-500 flex flex-col h-full relative overflow-hidden"
+                    onClick={(e) => {
+                      // Prevent navigation if the click originated from an element
+                      // that should not trigger navigation (e.g., delete button).
+                      if (e.target && e.target.closest && e.target.closest('[data-no-navigation]')) return
+                      navigate(`/board/${board._id}`)
+                    }}
+                    className="bg-gradient-to-br from-white to-indigo-50/40 p-10 rounded-[2.5rem] border border-indigo-200/60 shadow-lg shadow-indigo-100/40 cursor-pointer group hover:border-indigo-400/60 hover:shadow-xl hover:shadow-indigo-200/50 transition-all duration-500 flex flex-col h-full relative overflow-hidden"
                   >
                     {/* Hover Glow */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-bl from-indigo-300/20 to-purple-200/10 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-blue-200/10 to-indigo-100/20 rounded-full blur-2xl opacity-0 group-hover:opacity-80 transition-opacity duration-500" />
                     
-                    <div className="flex items-start justify-between mb-12">
-                      <div className="w-16 h-16 rounded-[1.5rem] bg-slate-50 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 flex items-center justify-center shadow-sm">
+                    {/* Delete Button - Bottom Right */}
+                    <motion.button data-no-navigation
+                      onClick={async (e) => {
+                        // stop React and native propagation to prevent parent handlers
+                        e.stopPropagation()
+                        if (e.preventDefault) e.preventDefault()
+                        if (e.nativeEvent && e.nativeEvent.stopImmediatePropagation) e.nativeEvent.stopImmediatePropagation()
+                        await handleDeleteBoard(board._id)
+                      }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="absolute bottom-6 right-6 z-10 w-11 h-11 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-white hover:from-rose-600 hover:to-red-700 border border-rose-400/50 shadow-lg hover:shadow-xl transition-all opacity-0 group-hover:opacity-100 flex items-center justify-center group-hover:scale-110"
+                      title="Delete board"
+                    >
+                      <FiTrash2 className="w-5 h-5" />
+                    </motion.button>
+                    
+                    <div className="flex items-start justify-between mb-12 relative z-10">
+                      <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-indigo-100 to-blue-50 text-indigo-600 group-hover:from-indigo-600 group-hover:to-purple-600 group-hover:text-white transition-all duration-500 flex items-center justify-center shadow-md group-hover:shadow-lg">
                         <FiWind className="w-8 h-8" />
                       </div>
-                      <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-indigo-400 group-hover:bg-indigo-50 transition-all">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center text-indigo-400 group-hover:from-indigo-400 group-hover:to-purple-400 group-hover:text-white transition-all shadow-sm">
                         <FiArrowRight className="w-5 h-5 transform -rotate-45 group-hover:rotate-0 transition-transform duration-500" />
                       </div>
                     </div>
                     
-                    <h3 className="text-3xl font-black text-slate-900 mb-6 tracking-tighter leading-none group-hover:text-indigo-600 transition-colors">
+                    <h3 className="text-3xl font-black text-slate-900 mb-6 tracking-tighter leading-none group-hover:text-indigo-700 transition-colors relative z-10">
                       {board.title}
                     </h3>
                     
-                    <div className="mt-auto flex items-center space-x-6 border-t border-slate-50 pt-8">
-                      <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <div className="mt-auto flex items-center space-x-6 border-t border-indigo-100 pt-8 relative z-10">
+                      <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-indigo-600">
                         <FiUsers className="mr-2 text-indigo-500" />
                         <span>{board.collaborators?.length || 1} Members</span>
                       </div>
-                      <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        <FiClock className="mr-2 text-indigo-500" />
+                      <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                        <FiClock className="mr-2 text-purple-500" />
                         <span>{formatDate(board.updatedAt)}</span>
                       </div>
                     </div>
                   </motion.div>
                 ))}
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -325,6 +482,7 @@ export default function Dashboard(){
           </div>
         )}
       </AnimatePresence>
+
     </div>
   )
 }

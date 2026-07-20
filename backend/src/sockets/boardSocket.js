@@ -1,4 +1,5 @@
 const Board = require('../models/Board')
+const Version = require('../models/Version');
 const jwt = require('jsonwebtoken');
 const { canEditBoard, getBoardRole } = require('../utils/boardAccess');
 
@@ -39,12 +40,19 @@ module.exports = (io) => {
   // JWT authentication middleware for socket connections
   nsp.use((socket, next) => {
     const token = socket.handshake.auth.token;
-    
+
     if (!token) {
       return next(new Error('Authentication error: No token provided'));
     }
 
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not configured on the server (socket auth)');
+      return next(new Error('Server misconfiguration'));
+    }
+
     try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // support tokens that include either `id` or `userId`
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
       socket.userId = decoded.userId || decoded.id;
       socket.userName = decoded.name;
@@ -226,13 +234,31 @@ module.exports = (io) => {
       socket.to(currentRoom).emit('cursor-move', { userId, name, ...payload });
     });
 
-    socket.on('save-version', (payload) => {
+    socket.on('save-version', async (payload) => {
       if (!currentRoom) return;
       if (!canEdit()) {
         console.warn(`User ${userId} attempted to save version but is ${userRole}`);
         return;
       }
-      socket.to(currentRoom).emit('save-version', payload);
+
+      try {
+        // persist a snapshot to Versions so HTTP clients and others can fetch it
+        const board = await Board.findById(currentBoardId);
+        if (!board) return;
+        board.version = (board.version || 0) + 1;
+        await board.save();
+        const version = await Version.create({
+          board: board._id,
+          snapshot: payload.snapshot || payload,
+          versionNumber: board.version,
+          createdBy: userId
+        });
+
+        // notify others with version metadata
+        socket.to(currentRoom).emit('save-version', { versionId: version._id, versionNumber: version.versionNumber });
+      } catch (err) {
+        console.error('Socket save-version error:', err);
+      }
     });
 
     socket.on('disconnect', () => {

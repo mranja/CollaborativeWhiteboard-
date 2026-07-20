@@ -198,3 +198,29 @@ exports.saveVersion = async (req, res) => {
     res.json(version);
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
+
+// Delete a board and related data permanently
+exports.deleteBoard = async (req, res) => {
+  try {
+    const boardId = req.params.id;
+    const board = await Board.findById(boardId);
+    if (!board) return res.status(404).json({ message: 'Board not found' });
+
+    // Only owner may delete
+    if (board.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Only the owner can delete this board' });
+    }
+
+    // Remove related versions and invites
+    await Version.deleteMany({ board: board._id });
+    await Invite.deleteMany({ board: board._id });
+
+    // Finally remove the board document
+    await Board.deleteOne({ _id: board._id });
+
+    res.json({ message: 'Board deleted permanently' });
+  } catch (err) {
+    console.error('Delete board error:', err);
+    res.status(500).json({ message: err.message || 'Failed to delete board' });
+  }
+};

@@ -39,6 +39,8 @@ export const boardAPI = {
     api.post('/api/boards', { title }),
   getBoard: (id) =>
     api.get(`/api/boards/${id}`),
+  deleteBoard: (id) =>
+    api.delete(`/api/boards/${id}`),
   getVersions: (boardId) =>
     api.get(`/api/boards/${boardId}/versions`),
   invite: (boardId, email, role) =>

@@ -41,93 +41,64 @@ export default function FabricCanvas() {
       const token = localStorage.getItem('token')
       if (token) {
         const socket = connectSocket(token)
-        socket.on('op:create', (message) => {
-          const { payload, meta } = message || {}
-          // ignore own messages
-          const clientId = localStorage.getItem('cw_client_id')
-          if (meta && meta.clientId && clientId && meta.clientId === clientId) return
-          // avoid creating twice if object exists
-          if (canvas.getObjects().some(o => o.id === payload.id)) return
-          if (payload.type === 'path' && payload.path) {
-            const p = new fabric.Path(payload.path, {
-              left: payload.left,
-              top: payload.top,
-              stroke: payload.stroke || payload.fill,
-              strokeWidth: payload.strokeWidth || 2,
-              fill: payload.fill || null
-            })
-            p.id = payload.id
-            canvas.add(p)
-            canvas.requestRenderAll()
-          } else if (payload.type === 'rect') {
-            const r = new fabric.Rect({ left: payload.left, top: payload.top, width: payload.width || 100, height: payload.height || 60, fill: payload.fill || 'transparent', stroke: payload.stroke })
-            r.id = payload.id
-            canvas.add(r)
-            canvas.requestRenderAll()
-          } else if ((payload.type === 'ellipse' || payload.type === 'circle') ) {
-            const e = new fabric.Ellipse({ left: payload.left, top: payload.top, rx: payload.rx || 40, ry: payload.ry || 30, fill: payload.fill || 'transparent', stroke: payload.stroke })
-            e.id = payload.id
-            canvas.add(e)
-            canvas.requestRenderAll()
-          } else if (payload.type === 'line') {
-            const l = new fabric.Line([payload.x1 || 0, payload.y1 || 0, payload.x2 || 100, payload.y2 || 0], { left: payload.left || 0, top: payload.top || 0, stroke: payload.stroke || '#000', strokeWidth: payload.strokeWidth || 2 })
-            l.id = payload.id
-            canvas.add(l)
-            canvas.requestRenderAll()
-          } else if (payload.type === 'text') {
-            const t = new fabric.Textbox(payload.text || '', { left: payload.left || 100, top: payload.top || 100, fontSize: payload.fontSize || 20, fontFamily: payload.fontFamily || 'sans-serif', fill: payload.fill || '#000' })
-            t.id = payload.id
-            canvas.add(t)
-            canvas.requestRenderAll()
-          } else if (payload.type === 'group' && Array.isArray(payload.objects)) {
-            const created = []
-            payload.objects.forEach((child) => {
-              // create children in-memory
-              if (child.type === 'rect') created.push(new fabric.Rect({ left: child.left, top: child.top, width: child.width, height: child.height, fill: child.fill }))
-              else if (child.type === 'ellipse') created.push(new fabric.Ellipse({ left: child.left, top: child.top, rx: child.rx, ry: child.ry, fill: child.fill }))
-              else if (child.type === 'text') created.push(new fabric.Textbox(child.text || '', { left: child.left, top: child.top, fontSize: child.fontSize || 20, fill: child.fill }))
-              else if (child.type === 'path' && child.path) created.push(new fabric.Path(child.path, { left: child.left, top: child.top, stroke: child.stroke }))
-            })
-            const g = new fabric.Group(created, { left: payload.left, top: payload.top })
-            g.id = payload.id
-            canvas.add(g)
-            canvas.requestRenderAll()
-          } else if (payload.type === 'image' && payload.src) {
-            fabric.Image.fromURL(payload.src, (img) => {
-              img.left = payload.left
-              img.top = payload.top
-              img.id = payload.id
-              canvas.add(img)
-              canvas.requestRenderAll()
-            })
-          }
-        })
 
-        socket.on('op:modify', (message) => {
-          const { payload, meta } = message || {}
+        // named handlers so we can remove them on cleanup
+        const handleDraw = (message) => {
           const clientId = localStorage.getItem('cw_client_id')
+          const meta = (message && (message.meta || message)) || {}
+          const payload = (message && (message.payload || message.element || message)) || null
           if (meta && meta.clientId && clientId && meta.clientId === clientId) return
-          const obj = canvas.getObjects().find(o => o.id === payload.id)
+          if (!payload) return
+          const objPayload = payload.element || payload
+          if (canvas.getObjects().some(o => o.id === objPayload.id)) return
+          try {
+            fabric.util.enlivenObjects([objPayload], (enlivened) => {
+              if (enlivened && enlivened.length) {
+                const obj = enlivened[0]
+                if (!obj.id) obj.id = objPayload.id
+                canvas.add(obj)
+                canvas.requestRenderAll()
+              }
+            })
+          } catch (e) {
+            // fallback handled elsewhere if needed
+          }
+        }
+
+        const handleModify = (message) => {
+          const clientId = localStorage.getItem('cw_client_id')
+          const meta = (message && (message.meta || message)) || {}
+          const payload = (message && (message.payload || message.element || message)) || null
+          if (meta && meta.clientId && clientId && meta.clientId === clientId) return
+          if (!payload) return
+          const objPayload = payload.element || payload
+          const obj = canvas.getObjects().find(o => o.id === objPayload.id)
           if (!obj) return
-          obj.set({ left: payload.left, top: payload.top, scaleX: payload.scaleX, scaleY: payload.scaleY, angle: payload.angle, fill: payload.fill, stroke: payload.stroke, strokeWidth: payload.strokeWidth })
+          obj.set({ left: objPayload.left, top: objPayload.top, scaleX: objPayload.scaleX, scaleY: objPayload.scaleY, angle: objPayload.angle, fill: objPayload.fill, stroke: objPayload.stroke, strokeWidth: objPayload.strokeWidth })
           obj.setCoords()
           canvas.requestRenderAll()
-        })
+        }
 
-        socket.on('op:delete', (message) => {
-          const { payload, meta } = message || {}
+        const handleDelete = (message) => {
           const clientId = localStorage.getItem('cw_client_id')
+          const meta = (message && (message.meta || message)) || {}
+          const payload = (message && (message.payload || message.element || message)) || null
           if (meta && meta.clientId && clientId && meta.clientId === clientId) return
-          const obj = canvas.getObjects().find(o => o.id === payload.id)
+          if (!payload) return
+          const objPayload = payload.element || payload
+          const obj = canvas.getObjects().find(o => o.id === objPayload.id)
           if (!obj) return
           canvas.remove(obj)
           canvas.requestRenderAll()
-        })
+        }
+
+        socket.on('draw-element', handleDraw)
+        socket.on('update-element', handleModify)
+        socket.on('delete-element', handleDelete)
       }
     } catch (e) {
       // noop
     }
-
     // basic pointer events for drawing
     canvas.isDrawingMode = tool === 'pen'
     if (canvas.freeDrawingBrush) {
@@ -313,7 +284,7 @@ export default function FabricCanvas() {
           const np = new fabric.Path(p.path, { left: p.left, top: p.top, stroke: p.stroke, strokeWidth: p.strokeWidth, fill: p.fill })
           np.id = p.id
           canvas.add(np)
-          emit('op:create', p)
+          emit('draw-element', p)
         }
       }
       if (original.type === 'modify') {
@@ -323,19 +294,33 @@ export default function FabricCanvas() {
           obj.set({ left: payload.left, top: payload.top, scaleX: payload.scaleX, scaleY: payload.scaleY, angle: payload.angle, fill: payload.fill, stroke: payload.stroke, strokeWidth: payload.strokeWidth })
           obj.setCoords()
           canvas.requestRenderAll()
-          emit('op:modify', payload)
+          emit('update-element', payload)
         }
       }
       if (original.type === 'delete') {
         const id = original.payload.id
         const obj = canvas.getObjects().find(o => o.id === id)
         if (obj) canvas.remove(obj)
-        emit('op:delete', { id })
+        emit('delete-element', { id })
       }
     })
 
     // cleanup
     return () => {
+      try {
+        // remove socket listeners if present
+        const token = localStorage.getItem('token')
+        if (token) {
+          const socket = getSocket()
+          if (socket) {
+            socket.off('draw-element')
+            socket.off('update-element')
+            socket.off('delete-element')
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
       window.removeEventListener('resize', resizeHandler)
       canvas.dispose()
     }

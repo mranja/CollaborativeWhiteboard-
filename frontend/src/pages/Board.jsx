@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import CanvasBoard from '../components/CanvasBoard'
 import Toolbar from '../components/Toolbar'
 import CollaboratorsList from '../components/CollaboratorsList'
@@ -82,13 +83,16 @@ export default function BoardPage() {
       {/* --- SOLID NAV BAR (Top) --- */}
       <nav className="h-16 border-b border-white/5 bg-[#0f172a] px-6 flex items-center justify-between z-[100] relative">
         <div className="flex items-center space-x-6">
-          <button 
+          <motion.button 
             onClick={() => navigate('/dashboard')}
-            className="flex items-center space-x-3 text-gray-400 hover:text-white transition-all py-1.5 pl-2 pr-4 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/5 group"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center space-x-2 text-gray-400 hover:text-indigo-400 transition-all py-2 px-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-indigo-500/30 group"
+            title="Back to Dashboard"
           >
-            <FiWind className="text-xl text-indigo-400 group-hover:rotate-12 transition-transform" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:inline">Flowboard</span>
-          </button>
+            <FiChevronLeft className="text-xl group-hover:-translate-x-1 transition-transform" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:inline">Back</span>
+          </motion.button>
           
           <div className="h-4 w-px bg-white/10" />
           

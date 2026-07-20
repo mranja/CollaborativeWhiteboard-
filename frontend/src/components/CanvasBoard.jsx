@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react'
 import { Stage, Layer, Rect, Circle, Line, Text, Arrow, Transformer, RegularPolygon, Star, Image as KonvaImage } from 'react-konva'
 import useImage from 'use-image'
-import io from 'socket.io-client'
+import { connectSocket, getSocket } from '../lib/socketClient'
 import useBoardStore from '../store/useBoardStore'
 import { useThrottledCursorMove } from '../hooks/useThrottledCursorMove'
 import LiveCursors from './LiveCursors'
@@ -114,6 +114,7 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
   useEffect(() => {
     const token = getSocketToken()
     if (!token) return
+    const s = connectSocket(token)
     const s = io(BOARD_SOCKET_URL, { auth: { token } })
     setSocket(s)
     onSocketChange?.(s)
@@ -134,7 +135,16 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
     s.on('delete-element', (op) => useBoardStore.getState().deleteElement(op.elementId))
     s.on('cursor-move', (p) => updateLiveCursor(p.userId, p.x, p.y, p.name, USER_COLORS[p.userId?.charCodeAt(0) % USER_COLORS.length]))
     s.on('user-left', (p) => removeLiveCursor(p.userId))
-    return () => { s.emit('leave-board', { boardId }); s.disconnect(); }
+    return () => {
+      try { s.emit('leave-board', { boardId }) } catch (e) {}
+      // remove listeners added by this component but do not disconnect shared socket
+      s.off('draw-element')
+      s.off('drawing-preview')
+      s.off('update-element')
+      s.off('delete-element')
+      s.off('cursor-move')
+      s.off('user-left')
+    }
   }, [boardId])
 
   useEffect(() => {
