@@ -115,7 +115,6 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
     const token = getSocketToken()
     if (!token) return
     const s = connectSocket(token)
-    const s = io(BOARD_SOCKET_URL, { auth: { token } })
     setSocket(s)
     onSocketChange?.(s)
     s.on('connect', () => s.emit('join-board', { boardId }))
