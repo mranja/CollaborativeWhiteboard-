@@ -36,13 +36,17 @@ export function useKeyboardShortcuts(fabricRef) {
         setTool('pan')
       }
     }
-
-    window.addEventListener('keydown', handler)
-    window.addEventListener('keyup', () => {
+    function handleKeyUp() {
       // restore select when space released
       setTool('select')
-    })
+    }
 
-    return () => window.removeEventListener('keydown', handler)
-  }, [fabricRef])
+    window.addEventListener('keydown', handler)
+    window.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [fabricRef, undo, redo, push, setTool])
 }

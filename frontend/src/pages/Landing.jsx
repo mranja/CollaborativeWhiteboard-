@@ -55,6 +55,13 @@ export default function Landing() {
 
   const user = useAuthStore(s => s.user)
 
+  const handleFlowboardClick = () => {
+    // Only scroll to top if on landing page
+    if (window.location.pathname === '/') {
+      slowScrollTo(0)
+    }
+  }
+
   const handleHomeClick = () => {
     if (user) {
       navigate('/dashboard')
@@ -99,7 +106,7 @@ export default function Landing() {
       {/* --- ELITE NAV BAR --- */}
       <nav className="fixed top-0 left-0 right-0 h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 z-[100] px-8">
         <div className="max-w-7xl mx-auto h-full flex items-center justify-between">
-          <div className="flex items-center space-x-3 group cursor-pointer" onClick={handleHomeClick}>
+          <div className="flex items-center space-x-3 group cursor-pointer" onClick={handleFlowboardClick}>
             <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white transition-transform group-hover:rotate-6 shadow-xl shadow-slate-200">
               <FiWind className="w-6 h-6" />
             </div>

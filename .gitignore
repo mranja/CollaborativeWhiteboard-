@@ -1,6 +1,10 @@
 node_modules
 dist
 .env
+frontend/.env
+backend/.env
+.vercel
 *.log
 /.idea
 .DS_Store
+.env.example
