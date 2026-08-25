@@ -117,32 +117,79 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
     const s = connectSocket(token)
     setSocket(s)
     onSocketChange?.(s)
-    s.on('connect', () => s.emit('join-board', { boardId }))
-    s.on('board-error', (payload) => console.error('Board socket error:', payload.message))
-    s.on('draw-element', (op) => {
+
+    const joinRoom = () => {
+      s.emit('join-board', { boardId }, (ack) => {
+        if (ack?.ok) {
+          console.log(`Joined board ${boardId} with role: ${ack.role}`)
+        } else if (ack?.message) {
+          console.warn('Join board ack error:', ack.message)
+        }
+      })
+    }
+
+    if (s.connected) {
+      joinRoom()
+    }
+    s.on('connect', joinRoom)
+
+    const handleDrawElement = (op) => {
       addElement(op.element)
       setPreviewElements(prev => {
         const next = { ...prev }
         delete next[op.userId]
         return next
       })
-    })
-    s.on('drawing-preview', (op) => {
+    }
+
+    const handleDrawingPreview = (op) => {
       setPreviewElements(prev => ({ ...prev, [op.userId]: op.element }))
-    })
-    s.on('update-element', (op) => useBoardStore.getState().updateElement(op.element))
-    s.on('delete-element', (op) => useBoardStore.getState().deleteElement(op.elementId))
-    s.on('cursor-move', (p) => updateLiveCursor(p.userId, p.x, p.y, p.name, USER_COLORS[p.userId?.charCodeAt(0) % USER_COLORS.length]))
-    s.on('user-left', (p) => removeLiveCursor(p.userId))
+    }
+
+    const handleUpdateElement = (op) => {
+      useBoardStore.getState().updateElement(op.element)
+    }
+
+    const handleDeleteElement = (op) => {
+      useBoardStore.getState().deleteElement(op.elementId)
+    }
+
+    const handleCursorMove = (p) => {
+      updateLiveCursor(
+        p.userId,
+        p.x,
+        p.y,
+        p.name,
+        USER_COLORS[p.userId?.charCodeAt(0) % USER_COLORS.length]
+      )
+    }
+
+    const handleUserLeft = (p) => {
+      removeLiveCursor(p.userId)
+    }
+
+    const handleBoardError = (payload) => {
+      console.warn('Board socket error:', payload?.message)
+    }
+
+    s.on('board-error', handleBoardError)
+    s.on('draw-element', handleDrawElement)
+    s.on('drawing-preview', handleDrawingPreview)
+    s.on('update-element', handleUpdateElement)
+    s.on('delete-element', handleDeleteElement)
+    s.on('cursor-move', handleCursorMove)
+    s.on('user-left', handleUserLeft)
+
     return () => {
       try { s.emit('leave-board', { boardId }) } catch (e) {}
-      // remove listeners added by this component but do not disconnect shared socket
-      s.off('draw-element')
-      s.off('drawing-preview')
-      s.off('update-element')
-      s.off('delete-element')
-      s.off('cursor-move')
-      s.off('user-left')
+      s.off('connect', joinRoom)
+      s.off('board-error', handleBoardError)
+      s.off('draw-element', handleDrawElement)
+      s.off('drawing-preview', handleDrawingPreview)
+      s.off('update-element', handleUpdateElement)
+      s.off('delete-element', handleDeleteElement)
+      s.off('cursor-move', handleCursorMove)
+      s.off('user-left', handleUserLeft)
     }
   }, [boardId])
 

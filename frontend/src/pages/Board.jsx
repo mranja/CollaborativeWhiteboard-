@@ -66,6 +66,14 @@ export default function BoardPage() {
     fetchBoard()
   }, [id, navigate, setBoard])
 
+  const [copiedLink, setCopiedLink] = useState(false)
+  const handleCopyLink = () => {
+    const url = window.location.href
+    navigator.clipboard?.writeText(url)
+    setCopiedLink(true)
+    setTimeout(() => setCopiedLink(false), 2500)
+  }
+
   const handleExport = (format) => {
     canvasRef.current?.exportImage(format)
     setShowExportMenu(false)
@@ -121,6 +129,20 @@ export default function BoardPage() {
             <FiMenu className="text-xl" />
           </button>
 
+          {/* Quick Share / Copy Room Link */}
+          <button 
+            onClick={handleCopyLink}
+            className={`px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold flex items-center transition-all border ${
+              copiedLink 
+                ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40' 
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500/30 shadow-lg shadow-indigo-600/20'
+            }`}
+            title="Copy board share link to clipboard"
+          >
+            <FiShare2 className="mr-1 md:mr-2 text-xs" />
+            <span>{copiedLink ? 'Link Copied!' : 'Share Room'}</span>
+          </button>
+
           {/* Export Dropdown */}
           <div className="relative">
             <button 
@@ -151,6 +173,7 @@ export default function BoardPage() {
           <button 
              onClick={() => setActiveSidebar(activeSidebar === 'collabs' ? null : 'collabs')}
              className={`p-2 rounded-lg transition-colors border ${activeSidebar === 'collabs' ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10' : 'border-white/10 text-gray-400 hover:text-white hover:bg-white/5'}`}
+             title="Collaborators"
           >
             <FiUsers className="text-lg" />
           </button>
@@ -158,10 +181,11 @@ export default function BoardPage() {
           {userRole === 'owner' && (
             <button 
               onClick={() => setShowInvite(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 md:px-5 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center"
+              className="bg-white/10 hover:bg-white/20 text-white px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-all border border-white/10 flex items-center"
+              title="Email invite"
             >
-              <FiShare2 className="mr-1 md:mr-2" />
-              <span className="hidden xs:inline">Invite</span>
+              <FiUsers className="mr-1 md:mr-2" />
+              <span className="hidden xs:inline">Email Invite</span>
             </button>
           )}
 

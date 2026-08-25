@@ -17,8 +17,9 @@ export default function Dashboard(){
   const [newBoardTitle, setNewBoardTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingBoards, setLoadingBoards] = useState(true)
-  const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showJoinModal, setShowJoinModal] = useState(false)
+  const [joinInput, setJoinInput] = useState('')
   const [showProfileModal, setShowProfileModal] = useState(false)
   
   // Profile edit states
@@ -78,6 +79,25 @@ export default function Dashboard(){
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleJoinBoard = (e) => {
+    e.preventDefault()
+    if (!joinInput.trim()) return
+    
+    // Extract ID if full URL pasted (e.g. https://.../board/65abc...)
+    let boardId = joinInput.trim()
+    if (boardId.includes('/board/')) {
+      const parts = boardId.split('/board/')
+      boardId = parts[1].split(/[/?#]/)[0]
+    }
+    if (!boardId) {
+      setError('Please enter a valid board ID or URL')
+      return
+    }
+    setShowJoinModal(false)
+    setJoinInput('')
+    navigate(`/board/${boardId}`)
   }
 
   const handleDeleteBoard = async (boardId) => {
@@ -231,17 +251,31 @@ export default function Dashboard(){
               </p>
             </motion.div>
             
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setShowCreateModal(true)}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-12 py-4 rounded-2xl font-semibold shadow-xl shadow-indigo-300/30 hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center group w-fit"
-            >
-              <FiPlus className="mr-3 text-xl group-hover:rotate-90 transition-transform duration-300" />
-              <span>Launch Board</span>
-            </motion.button>
+            <div className="flex flex-wrap items-center gap-4">
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowJoinModal(true)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 px-8 py-4 rounded-2xl font-bold shadow-sm transition-all flex items-center group"
+              >
+                <FiUsers className="mr-3 text-lg text-indigo-600 group-hover:scale-110 transition-transform" />
+                <span>Join Room</span>
+              </motion.button>
+
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowCreateModal(true)}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-10 py-4 rounded-2xl font-semibold shadow-xl shadow-indigo-300/30 hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center group"
+              >
+                <FiPlus className="mr-3 text-xl group-hover:rotate-90 transition-transform duration-300" />
+                <span>Launch Board</span>
+              </motion.button>
+            </div>
           </div>
 
           {/* Boards Grid */}
@@ -269,14 +303,23 @@ export default function Dashboard(){
                   <FiActivity className="w-12 h-12" />
                 </div>
                 <h3 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Focus starts here.</h3>
-                <p className="text-slate-400 font-medium mb-10 text-lg">Initialize a workspace and start streaming your team's ideas in real-time.</p>
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-slate-900 text-white px-12 py-5 rounded-2xl font-bold flex items-center mx-auto transition-all hover:bg-indigo-600 shadow-xl"
-                >
-                  <FiPlus className="mr-3" />
-                  <span>Start New Flow</span>
-                </button>
+                <p className="text-slate-400 font-medium mb-10 text-lg">Initialize a workspace or join an existing stream with your team.</p>
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                  <button
+                    onClick={() => setShowJoinModal(true)}
+                    className="bg-slate-100 text-slate-800 border border-slate-200 px-10 py-5 rounded-2xl font-bold flex items-center transition-all hover:bg-slate-200 shadow-sm"
+                  >
+                    <FiUsers className="mr-3 text-indigo-600" />
+                    <span>Join with Room ID</span>
+                  </button>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold flex items-center transition-all hover:bg-indigo-600 shadow-xl"
+                  >
+                    <FiPlus className="mr-3" />
+                    <span>Start New Flow</span>
+                  </button>
+                </div>
               </motion.div>
             ) : (
               <motion.div 
@@ -475,6 +518,63 @@ export default function Dashboard(){
                     className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black shadow-2xl shadow-slate-200 hover:bg-indigo-600 transition-all disabled:opacity-50 active:scale-95"
                   >
                     {loading ? 'Initializing...' : 'Launch Stream'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Join Room Modal */}
+      <AnimatePresence>
+        {showJoinModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowJoinModal(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white p-12 md:p-16 rounded-[4rem] max-w-xl w-full shadow-3xl border border-slate-100 overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-50 rounded-full blur-3xl -z-10" />
+              
+              <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-4 leading-none">Join <span className="text-indigo-600">Room</span></h2>
+              <p className="text-slate-400 font-medium mb-12 text-lg">Enter a Board ID or paste the shareable whiteboard URL.</p>
+              
+              <form onSubmit={handleJoinBoard} className="space-y-10">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Room ID or Link</label>
+                  <input
+                    type="text"
+                    value={joinInput}
+                    onChange={(e) => setJoinInput(e.target.value)}
+                    className="w-full h-20 px-8 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50 transition-all font-bold text-xl text-slate-900 placeholder:text-slate-300"
+                    placeholder="e.g. 65fa18... or https://.../board/65fa18..."
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowJoinModal(false)}
+                    className="flex-1 py-5 text-sm font-black text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-[0.2em]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-5 rounded-2xl font-black shadow-2xl shadow-indigo-200 hover:from-indigo-700 hover:to-purple-700 transition-all active:scale-95"
+                  >
+                    Join Whiteboard
                   </button>
                 </div>
               </form>

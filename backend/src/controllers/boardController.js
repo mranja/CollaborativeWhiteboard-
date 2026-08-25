@@ -12,10 +12,32 @@ const loadBoardForUser = async (boardId, userId, populate = false) => {
     query = query.populate('owner collaborators.user', 'name email');
   }
 
-  const board = await query;
+  let board = await query;
   if (!board) return { board: null, role: null };
 
-  return { board, role: getBoardRole(board, userId) };
+  let role = getBoardRole(board, userId);
+
+  // If user is authenticated and not yet attached to the board, auto-add as editor collaborator
+  if (!role && userId) {
+    try {
+      await Board.updateOne(
+        { _id: board._id, owner: { $ne: userId }, 'collaborators.user': { $ne: userId } },
+        { $push: { collaborators: { user: userId, role: 'editor' } } }
+      );
+      // Reload board with updated collaborator list
+      let reloadedQuery = Board.findById(boardId);
+      if (populate) {
+        reloadedQuery = reloadedQuery.populate('owner collaborators.user', 'name email');
+      }
+      board = await reloadedQuery;
+      role = 'editor';
+    } catch (e) {
+      console.warn('Auto-join collaborator error:', e.message);
+      role = 'editor';
+    }
+  }
+
+  return { board, role };
 };
 
 exports.listUserBoards = async (req, res) => {

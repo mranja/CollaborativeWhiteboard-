@@ -18,12 +18,12 @@ module.exports = async (req, res, next) => {
   }
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const secret = process.env.JWT_SECRET || 'supersecretkey123';
+    const payload = jwt.verify(token, secret);
     const user = await User.findById(payload.id || payload.userId);
     if (!user) return res.status(401).json({ message: 'Invalid token' });
     // normalize id to string to avoid ObjectId vs string comparison bugs
-    req.user = { id: user._id.toString(), role: user.role, name: user.name };
+    req.user = { id: user._id.toString(), role: user.role, name: user.name, email: user.email };
     next();
   } catch (err) {
     console.error('Auth middleware error:', err.message);

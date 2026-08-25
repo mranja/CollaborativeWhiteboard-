@@ -3,11 +3,11 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const authCtrl = require('../controllers/authController');
 
-// Rate limiting for auth endpoints - 10 attempts per 15 minutes per IP
+// Rate limiting for auth endpoints - generous window for real-world usage and proxy environments
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
-  message: 'Too many authentication attempts, please try again later',
+  max: 100, // 100 requests per 15 minutes
+  message: { message: 'Too many authentication attempts. Please wait a moment and try again.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
