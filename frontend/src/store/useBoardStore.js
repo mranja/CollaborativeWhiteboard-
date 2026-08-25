@@ -4,6 +4,7 @@ const useBoardStore = create((set) => ({
   boardId: null,
   elements: [],
   liveCursors: {}, // { userId: { x, y, name, color } }
+  presence: [],    // [{ userId, name }] — everyone else currently in the room
   currentTool: 'select',
   currentUser: null,
   
@@ -18,7 +19,34 @@ const useBoardStore = create((set) => ({
   setStrokeWidth: (width) => set({ strokeWidth: width }),
   setFillColor: (color) => set({ fillColor: color }),
   
-  setBoard: (id, initialElements = []) => set({ boardId: id, elements: initialElements }),
+  // Switching boards must drop the previous room's cursors and presence,
+  // otherwise stale collaborators linger and inflate the active-user count.
+  setBoard: (id, initialElements = []) => set((state) => (
+    state.boardId === id
+      ? { boardId: id, elements: initialElements }
+      : { boardId: id, elements: initialElements, liveCursors: {}, presence: [] }
+  )),
+
+  setPresence: (members = []) => set({
+    presence: members
+      .filter((m) => m && m.userId)
+      .map((m) => ({ userId: String(m.userId), name: m.name || 'Anonymous' }))
+  }),
+
+  addPresence: (member) => set((state) => {
+    if (!member || !member.userId) return state
+    const userId = String(member.userId)
+    if (state.presence.some((p) => p.userId === userId)) return state
+    return { presence: [...state.presence, { userId, name: member.name || 'Anonymous' }] }
+  }),
+
+  removePresence: (userId) => set((state) => {
+    const id = String(userId)
+    if (!state.presence.some((p) => p.userId === id)) return state
+    return { presence: state.presence.filter((p) => p.userId !== id) }
+  }),
+
+  clearPresence: () => set({ presence: [], liveCursors: {} }),
   
   addElement: (el) => set(state => ({ elements: [...state.elements, el] })),
   
@@ -38,6 +66,7 @@ const useBoardStore = create((set) => ({
   })),
   
   removeLiveCursor: (userId) => set((state) => {
+    if (!(userId in state.liveCursors)) return state
     const newCursors = { ...state.liveCursors }
     delete newCursors[userId]
     return { liveCursors: newCursors }

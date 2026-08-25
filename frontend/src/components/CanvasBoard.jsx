@@ -7,6 +7,7 @@ import { useThrottledCursorMove } from '../hooks/useThrottledCursorMove'
 import LiveCursors from './LiveCursors'
 import { getSocketToken } from '../api/client'
 import { v4 as uuidv4 } from 'uuid'
+import { FiMaximize } from 'react-icons/fi'
 import jsPDF from 'jspdf'
 import * as pdfjsLib from 'pdfjs-dist'
 
@@ -39,6 +40,26 @@ const SOCKET_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
 const BOARD_SOCKET_URL = `${SOCKET_URL.replace(/\/$/, '')}/board`
 const USER_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
 
+// Hash the whole id rather than reading a single char code: `undefined.charCodeAt`
+// short-circuited to NaN, which indexed the palette out of bounds and left the
+// remote cursor with an undefined colour.
+const colorForUser = (userId) => {
+  const key = String(userId || '')
+  if (!key) return USER_COLORS[0]
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  }
+  return USER_COLORS[hash % USER_COLORS.length]
+}
+
+// Typing in a form field must never be interpreted as a canvas shortcut.
+const isTypingTarget = (target) => {
+  if (!target) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable === true
+}
+
 const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, theme = 'dark' }, ref) => {
   const fileInputRef = useRef(null)
   const containerRef = useRef(null)
@@ -67,6 +88,7 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
   const { 
     elements, addElement, updateElement, deleteElement, 
     liveCursors, updateLiveCursor, removeLiveCursor, 
+    setPresence, addPresence, removePresence,
     currentUser, currentTool, strokeColor, strokeWidth 
   } = useBoardStore()
   
@@ -93,6 +115,9 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
       if (!stageRef.current) return
       const oldNodes = transformerRef.current?.nodes()
       transformerRef.current?.nodes([])
+      // Konva only clears the selection handles on the next draw, so without
+      // this the exported image still contains them.
+      transformerRef.current?.getLayer()?.draw()
       const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 })
       if (format === 'png') {
         const link = document.createElement('a')
@@ -106,7 +131,10 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
         pdf.addImage(dataURL, 'PNG', 0, 0, dimensions.width, dimensions.height)
         pdf.save(`whiteboard-${boardId}.pdf`)
       }
-      if (oldNodes) transformerRef.current?.nodes(oldNodes)
+      if (oldNodes) {
+        transformerRef.current?.nodes(oldNodes)
+        transformerRef.current?.getLayer()?.batchDraw()
+      }
     }
   }))
 
@@ -122,6 +150,7 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
       s.emit('join-board', { boardId }, (ack) => {
         if (ack?.ok) {
           console.log(`Joined board ${boardId} with role: ${ack.role}`)
+          if (Array.isArray(ack.members)) setPresence(ack.members)
         } else if (ack?.message) {
           console.warn('Join board ack error:', ack.message)
         }
@@ -155,17 +184,32 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
     }
 
     const handleCursorMove = (p) => {
-      updateLiveCursor(
-        p.userId,
-        p.x,
-        p.y,
-        p.name,
-        USER_COLORS[p.userId?.charCodeAt(0) % USER_COLORS.length]
-      )
+      if (!p?.userId) return
+      updateLiveCursor(p.userId, p.x, p.y, p.name, colorForUser(p.userId))
+      // A cursor from someone we have not seen yet means our presence list is
+      // behind; keep it in sync rather than waiting for the next join.
+      addPresence({ userId: p.userId, name: p.name })
+    }
+
+    // Seeded when we join so the collaborator list and the active-user count
+    // are correct straight away instead of filling in one cursor at a time.
+    const handlePresence = (payload) => {
+      setPresence(payload?.members || [])
+    }
+
+    const handleUserJoined = (p) => {
+      addPresence(p)
     }
 
     const handleUserLeft = (p) => {
       removeLiveCursor(p.userId)
+      removePresence(p.userId)
+      setPreviewElements(prev => {
+        if (!(p.userId in prev)) return prev
+        const next = { ...prev }
+        delete next[p.userId]
+        return next
+      })
     }
 
     const handleBoardError = (payload) => {
@@ -178,6 +222,8 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
     s.on('update-element', handleUpdateElement)
     s.on('delete-element', handleDeleteElement)
     s.on('cursor-move', handleCursorMove)
+    s.on('board-presence', handlePresence)
+    s.on('user-joined', handleUserJoined)
     s.on('user-left', handleUserLeft)
 
     return () => {
@@ -189,12 +235,19 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
       s.off('update-element', handleUpdateElement)
       s.off('delete-element', handleDeleteElement)
       s.off('cursor-move', handleCursorMove)
+      s.off('board-presence', handlePresence)
+      s.off('user-joined', handleUserJoined)
       s.off('user-left', handleUserLeft)
+      useBoardStore.getState().clearPresence()
+      onSocketChange?.(null)
     }
   }, [boardId])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Backspace inside any text field (invite email, board title, the canvas
+      // text editor) previously deleted the selected shape as well.
+      if (isTypingTarget(e.target)) return
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !isViewer && !editingTextId) {
         deleteElement(selectedId)
         socket?.emit('delete-element', { elementId: selectedId })
@@ -345,12 +398,17 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
       const stage = stageRef.current
       // Check a small 10x10 area for continuous erasing
       const size = 10
+      // The 3x3 probe grid hits the same shape several times; without this the
+      // same delete was emitted up to nine times per mouse-move.
+      const erased = new Set()
       for (let i = -size/2; i <= size/2; i += 5) {
         for (let j = -size/2; j <= size/2; j += 5) {
           const shape = stage.getIntersection({ x: rawPos.x + i, y: rawPos.y + j })
-          if (shape && shape.id() && shape.name() !== 'grid') {
-            deleteElement(shape.id())
-            socket?.emit('delete-element', { elementId: shape.id() })
+          const shapeId = shape && shape.id()
+          if (shapeId && shape.name() !== 'grid' && !erased.has(shapeId)) {
+            erased.add(shapeId)
+            deleteElement(shapeId)
+            socket?.emit('delete-element', { elementId: shapeId })
           }
         }
       }
@@ -610,13 +668,28 @@ const CanvasBoard = forwardRef(({ boardId, userRole = 'editor', onSocketChange, 
         />
       )}
 
-      {/* View Controls */}
-      <div className="absolute bottom-6 right-6 flex items-center space-x-3 pointer-events-none">
-        <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-widest uppercase shadow-sm ${theme === 'dark' ? 'bg-slate-800 border-white/10 text-slate-400' : 'bg-white border-slate-200 text-slate-400'}`}>
-          {Math.round(scale * 100)}%
+      {/* View Controls — one floating cluster instead of two loose chips. */}
+      <div className={`
+        absolute bottom-6 right-6 z-20 flex items-stretch rounded-2xl overflow-hidden
+        border backdrop-blur-xl shadow-2xl pointer-events-none
+        ${theme === 'dark'
+          ? 'bg-[#141d33]/80 border-white/10 shadow-black/50'
+          : 'bg-white/85 border-slate-200 shadow-slate-300/40'}
+      `}>
+        <div className="flex items-center gap-2 px-3.5 py-2.5">
+          <FiMaximize className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`} />
+          <span className={`text-[11px] font-black tabular-nums ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>
+            {Math.round(scale * 100)}%
+          </span>
         </div>
-        <div className={`px-3 py-1.5 rounded-lg border text-[10px] font-black tracking-widest uppercase shadow-sm ${theme === 'dark' ? 'bg-slate-800 border-white/10 text-indigo-400' : 'bg-white border-slate-200 text-indigo-500'}`}>
-          {currentTool}
+
+        <div className={`w-px my-2 ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-200'}`} />
+
+        <div className="flex items-center gap-2 px-3.5 py-2.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+          <span className={`text-[10px] font-black uppercase tracking-[0.14em] ${theme === 'dark' ? 'text-indigo-300' : 'text-indigo-600'}`}>
+            {currentTool}
+          </span>
         </div>
       </div>
     </div>

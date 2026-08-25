@@ -8,7 +8,12 @@ export default function LiveCursors({ cursors }) {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
       <AnimatePresence>
-        {Object.entries(cursors).map(([userId, cursor]) => (
+        {Object.entries(cursors).map(([userId, cursor]) => {
+          // `${cursor.color}33 || fallback` can never fall back: a template
+          // literal is always a truthy string, so an undefined colour produced
+          // the literal "undefined33". Resolve the colour once, up front.
+          const color = cursor.color || '#8b5cf6'
+          return (
           <motion.div
             key={userId}
             className="absolute z-[100] flex flex-col items-start"
@@ -39,7 +44,7 @@ export default function LiveCursors({ cursors }) {
             >
               <path 
                 d="M5.65376 12.3745L15.4243 19.3514C17.0708 20.5271 19.1432 18.4547 17.9675 16.8083L10.9905 7.03774C10.0384 5.70484 7.96162 5.70484 7.00948 7.03774L5.65376 12.3745Z" 
-                fill={cursor.color || '#8b5cf6'} 
+                fill={color} 
                 stroke="white" 
                 strokeWidth="1.5"
                 strokeLinejoin="round"
@@ -50,8 +55,8 @@ export default function LiveCursors({ cursors }) {
             <motion.div
               className="mt-1 ml-4 px-3 py-1.5 rounded-lg border text-[11px] font-bold tracking-tight whitespace-nowrap shadow-2xl backdrop-blur-md"
               style={{
-                backgroundColor: `${cursor.color}33` || 'rgba(139, 92, 246, 0.2)',
-                borderColor: `${cursor.color}66` || 'rgba(139, 92, 246, 0.4)',
+                backgroundColor: `${color}33`,
+                borderColor: `${color}66`,
                 color: 'white',
                 textShadow: '0 1px 2px rgba(0,0,0,0.5)'
               }}
@@ -64,7 +69,8 @@ export default function LiveCursors({ cursors }) {
               </div>
             </motion.div>
           </motion.div>
-        ))}
+          )
+        })}
       </AnimatePresence>
     </div>
   )

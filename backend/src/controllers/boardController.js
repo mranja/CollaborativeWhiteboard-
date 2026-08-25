@@ -3,8 +3,23 @@ const Version = require('../models/Version');
 const Invite = require('../models/Invite');
 const User = require('../models/User');
 const { sendInviteEmail } = require('../utils/email');
-const { canEditBoard, getBoardRole } = require('../utils/boardAccess');
+const { canEditBoard, getBoardRole, normalizeId } = require('../utils/boardAccess');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
+
+// Collaborator entries can outlive the user they point at (deleted account), and
+// a board can end up without an owner. normalizeId returns null for those cases
+// instead of throwing on `.toString()` of null, which previously turned an edge
+// case into a 500.
+const isSameUser = (a, b) => {
+  const left = normalizeId(a);
+  const right = normalizeId(b);
+  return Boolean(left && right && left === right);
+};
+
+const hasCollaborator = (board, userId) => (
+  (board.collaborators || []).some((c) => isSameUser(c && c.user, userId))
+);
 
 const loadBoardForUser = async (boardId, userId, populate = false) => {
   let query = Board.findById(boardId);
@@ -87,6 +102,9 @@ exports.createBoard = async (req, res) => {
 
 exports.getBoard = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
     const { board, role } = await loadBoardForUser(req.params.id, req.user.id, true);
     if (!board) return res.status(404).json({ message: 'Board not found' });
     if (!role) return res.status(403).json({ message: 'You do not have access to this board' });
@@ -98,6 +116,9 @@ exports.getBoard = async (req, res) => {
 exports.getVersions = async (req, res) => {
   try {
     const { boardId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(boardId)) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
     const { board, role } = await loadBoardForUser(boardId, req.user.id);
     if (!board) return res.status(404).json({ message: 'Board not found' });
     if (!role) return res.status(403).json({ message: 'You do not have access to this board' });
@@ -120,21 +141,25 @@ exports.invite = async (req, res) => {
   }
   
   try {
+    if (!mongoose.Types.ObjectId.isValid(boardId)) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
     const board = await Board.findById(boardId);
     if (!board) return res.status(404).json({ message: 'Board not found' });
-    
+
     // Only owner can invite
-    if (board.owner.toString() !== req.user.id.toString()) {
+    if (!isSameUser(board.owner, req.user.id)) {
       return res.status(403).json({ message: 'Only board owner can invite' });
     }
 
     // Check if user already has an account
     const existingUser = await User.findOne({ email });
-    
+
     // Check if already a collaborator
     if (existingUser) {
-      const alreadyCollab = board.collaborators.some(c => c.user.toString() === existingUser._id.toString());
-      if (alreadyCollab || board.owner.toString() === existingUser._id.toString()) {
+      const alreadyCollab = hasCollaborator(board, existingUser._id);
+      if (alreadyCollab || isSameUser(board.owner, existingUser._id)) {
         return res.status(400).json({ message: 'User is already part of the board' });
       }
     }
@@ -189,8 +214,8 @@ exports.acceptInvite = async (req, res) => {
     const userId = req.user.id;
     
     // Add user as collaborator
-    const alreadyCollab = board.collaborators.some(c => c.user.toString() === userId);
-    if (!alreadyCollab && board.owner.toString() !== userId) {
+    const alreadyCollab = hasCollaborator(board, userId);
+    if (!alreadyCollab && !isSameUser(board.owner, userId)) {
       board.collaborators.push({ user: userId, role: invite.role });
       await board.save();
     }
@@ -209,6 +234,9 @@ exports.saveVersion = async (req, res) => {
   try {
     const { boardId } = req.params;
     const { snapshot } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(boardId)) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
     const { board, role } = await loadBoardForUser(boardId, req.user.id);
     if (!board) return res.status(404).json({ message: 'Board not found' });
     if (!canEditBoard(role)) {
@@ -225,11 +253,15 @@ exports.saveVersion = async (req, res) => {
 exports.deleteBoard = async (req, res) => {
   try {
     const boardId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(boardId)) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
     const board = await Board.findById(boardId);
     if (!board) return res.status(404).json({ message: 'Board not found' });
 
     // Only owner may delete
-    if (board.owner.toString() !== req.user.id) {
+    if (!isSameUser(board.owner, req.user.id)) {
       return res.status(403).json({ message: 'Only the owner can delete this board' });
     }
 

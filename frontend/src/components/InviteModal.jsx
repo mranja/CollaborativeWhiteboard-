@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { boardAPI } from '../api/client'
 import { FiMail, FiUserPlus, FiX, FiCheckCircle, FiShield } from 'react-icons/fi'
+import Loader from './Loader'
 
 export default function InviteModal({ boardId, onClose, onInviteSent }) {
   const [email, setEmail] = useState('')
@@ -128,6 +129,7 @@ export default function InviteModal({ boardId, onClose, onInviteSent }) {
               disabled={loading}
               className="btn-primary w-full py-4 flex items-center justify-center space-x-2"
             >
+              {loading && <Loader inline size="xs" />}
               <span>{loading ? 'Sending Invite...' : 'Send Invitation'}</span>
             </button>
             <button

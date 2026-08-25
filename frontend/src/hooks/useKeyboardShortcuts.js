@@ -10,6 +10,7 @@ export function useKeyboardShortcuts(fabricRef) {
 
   useEffect(() => {
     function handler(e) {
+      if (isTypingTarget(e.target)) return
       const meta = e.ctrlKey || e.metaKey
       // Undo
       if (meta && e.key === 'z') {
@@ -36,9 +37,17 @@ export function useKeyboardShortcuts(fabricRef) {
         setTool('pan')
       }
     }
-    function handleKeyUp() {
-      // restore select when space released
-      setTool('select')
+
+    function isTypingTarget(target) {
+      if (!target) return false
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable === true
+    }
+    function handleKeyUp(e) {
+      // Restore select only when Space is released. This used to run on every
+      // keyup, so releasing any key silently snapped the active tool back to
+      // the pointer mid-drawing.
+      if (e.code === 'Space') setTool('select')
     }
 
     window.addEventListener('keydown', handler)

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { boardAPI } from '../api/client'
-import { FiCheckCircle, FiLoader, FiAlertCircle, FiArrowRight } from 'react-icons/fi'
+import { FiCheckCircle, FiAlertCircle, FiArrowRight } from 'react-icons/fi'
+import Loader from '../components/Loader'
 
 export default function AcceptInvite() {
   const { token } = useParams()
@@ -11,23 +12,35 @@ export default function AcceptInvite() {
   const [boardId, setBoardId] = useState(null)
 
   useEffect(() => {
+    let isMounted = true
+    let redirectTimer = null
+
     const accept = async () => {
       try {
         const res = await boardAPI.acceptInvite(token)
+        if (!isMounted) return
         setStatus('success')
         setMessage(res.data.message)
         setBoardId(res.data.boardId)
-        
+
         // Redirect after 3 seconds
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
           navigate(`/board/${res.data.boardId}`)
         }, 3000)
       } catch (err) {
+        if (!isMounted) return
         setStatus('error')
         setMessage(err.response?.data?.message || 'Failed to accept invitation')
       }
     }
     accept()
+
+    // Without this, leaving the page before the timer fires still navigated
+    // and set state on an unmounted component.
+    return () => {
+      isMounted = false
+      if (redirectTimer) clearTimeout(redirectTimer)
+    }
   }, [token, navigate])
 
   return (
@@ -35,11 +48,12 @@ export default function AcceptInvite() {
       <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 text-center animate-scaleIn">
         {status === 'loading' && (
           <div className="space-y-6">
-            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto animate-spin">
-              <FiLoader className="text-3xl" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Validating Invitation...</h2>
-            <p className="text-slate-400">Please wait while we sync your permissions.</p>
+            <Loader
+              size="md"
+              theme="light"
+              label="Validating Invitation..."
+              sub="Please wait while we sync your permissions."
+            />
           </div>
         )}
 

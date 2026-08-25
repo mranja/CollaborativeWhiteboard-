@@ -4,6 +4,7 @@ import { authAPI } from '../api/client'
 import useAuthStore from '../store/useAuthStore'
 import useBoardStore from '../store/useBoardStore'
 import { FiMail, FiLock, FiUser, FiArrowRight, FiWind, FiChevronLeft } from 'react-icons/fi'
+import Loader from '../components/Loader'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -70,7 +71,7 @@ export default function Register() {
             >
               <FiWind className="w-8 h-8" />
             </div>
-            <h1 onClick={() => navigate(user ? '/dashboard' : '/')} className="text-3xl font-black text-slate-900 tracking-tight text-center cursor-pointer hover:opacity-80 transition-opacity">Join <span className="text-indigo-600">Flow</span></h1>
+            <h1 onClick={() => navigate(user ? '/dashboard' : '/')} className="font-display text-3xl text-slate-900 tracking-tight text-center cursor-pointer hover:opacity-80 transition-opacity">Join <span className="text-indigo-600">Flow</span></h1>
             <p className="text-slate-400 font-medium text-sm mt-2">Start your creative real-time journey</p>
           </div>
 
@@ -133,6 +134,7 @@ export default function Register() {
               disabled={loading}
               className="w-full h-14 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center space-x-3 shadow-xl shadow-slate-100 hover:bg-indigo-600 transition-all active:scale-95 disabled:opacity-50 group"
             >
+              {loading && <Loader inline size="xs" />}
               <span>{loading ? 'Creating Account...' : 'Get Started'}</span>
               {!loading && <FiArrowRight className="group-hover:translate-x-1 transition-transform" />}
             </button>

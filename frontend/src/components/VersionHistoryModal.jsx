@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { boardAPI } from '../api/client'
 import { FiClock, FiRotateCcw, FiX, FiCheck, FiCalendar, FiUser } from 'react-icons/fi'
+import Loader from './Loader'
 
 export default function VersionHistoryModal({ boardId, onClose }) {
   const [versions, setVersions] = useState([])
@@ -67,9 +68,8 @@ export default function VersionHistoryModal({ boardId, onClose }) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 animate-pulse">
-               <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4" />
-               <p className="text-gray-500 font-medium">Loading history...</p>
+            <div className="flex flex-col items-center justify-center py-20">
+               <Loader size="md" theme="dark" label="Loading history..." />
             </div>
           ) : versions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">

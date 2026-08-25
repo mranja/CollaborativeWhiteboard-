@@ -2,7 +2,7 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'supersecretkey123';
+const { getJwtSecret } = require('../utils/jwt');
 
 exports.register = async (req, res) => {
   let { name, email, password } = req.body;

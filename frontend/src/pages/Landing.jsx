@@ -111,7 +111,7 @@ export default function Landing() {
               <FiWind className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tight text-slate-900 uppercase leading-none">Flow<span className="text-indigo-600">board</span></span>
+              <span className="font-display text-xl tracking-tight text-slate-900 uppercase leading-none">Flow<span className="text-indigo-600">board</span></span>
               <span className="text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase mt-1">Idea Realtime Engine</span>
             </div>
           </div>
@@ -423,7 +423,7 @@ export default function Landing() {
       <footer className="py-12 border-t border-slate-100 text-center">
          <div className="flex items-center justify-center space-x-2 mb-4">
             <FiWind className="text-slate-300 w-4 h-4" />
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Flowboard Idea Engine</span>
+            <span className="font-display text-[10px] text-slate-400 uppercase tracking-[0.2em]">Flowboard Idea Engine</span>
          </div>
          <p className="text-[9px] text-slate-300 font-bold uppercase tracking-[0.3em]">&copy; 2026 Flowboard | Precision Performance</p>
       </footer>
