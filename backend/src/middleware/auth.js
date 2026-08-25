@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { getJwtSecret } = require('../utils/jwt');
 
 module.exports = async (req, res, next) => {
   const auth = req.headers.authorization;
@@ -12,14 +13,8 @@ module.exports = async (req, res, next) => {
 
   const token = parts[1];
 
-  if (!process.env.JWT_SECRET) {
-    console.error('JWT_SECRET is not configured on the server');
-    return res.status(500).json({ message: 'Server misconfiguration' });
-  }
-
   try {
-    const secret = process.env.JWT_SECRET || 'supersecretkey123';
-    const payload = jwt.verify(token, secret);
+    const payload = jwt.verify(token, getJwtSecret());
     const user = await User.findById(payload.id || payload.userId);
     if (!user) return res.status(401).json({ message: 'Invalid token' });
     // normalize id to string to avoid ObjectId vs string comparison bugs

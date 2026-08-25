@@ -1,34 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { FiUser, FiActivity } from 'react-icons/fi'
+import useBoardStore from '../store/useBoardStore'
 
 export default function CollaboratorsList({ boardId, socket }) {
-  const [collaborators, setCollaborators] = useState([])
-
-  useEffect(() => {
-    if (!socket) return
-
-    const handleUserJoined = (data) => {
-      setCollaborators((prev) => {
-        const exists = prev.some((c) => c.id === data.userId)
-        if (!exists) {
-          return [...prev, { id: data.userId, name: data.name, online: true }]
-        }
-        return prev
-      })
-    }
-
-    const handleUserLeft = (data) => {
-      setCollaborators((prev) => prev.filter((c) => c.id !== data.userId))
-    }
-
-    socket.on('user-joined', handleUserJoined)
-    socket.on('user-left', handleUserLeft)
-
-    return () => {
-      socket.off('user-joined', handleUserJoined)
-      socket.off('user-left', handleUserLeft)
-    }
-  }, [socket])
+  // Presence lives in the board store, which is seeded from the `board-presence`
+  // roster the server sends on join. Subscribing to socket events here instead
+  // meant this panel only ever saw people who joined after it mounted — open the
+  // sidebar a moment late and it claimed nobody else was in the room.
+  const presence = useBoardStore((s) => s.presence)
+  const collaborators = presence.map((p) => ({ id: p.userId, name: p.name, online: true }))
 
   return (
     <div className="flex flex-col space-y-3">
@@ -49,7 +29,7 @@ export default function CollaboratorsList({ boardId, socket }) {
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center text-purple-300 font-bold border border-white/10 group-hover:scale-110 transition-transform">
-                  {collab.name.charAt(0).toUpperCase()}
+                  {(collab.name || 'A').charAt(0).toUpperCase()}
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-[#1e293b] rounded-full animate-pulse" />
               </div>

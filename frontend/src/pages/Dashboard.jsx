@@ -7,16 +7,31 @@ import {
   FiActivity, FiWind, FiTrash2, FiUser, FiSettings, FiCamera, FiTrendingUp, FiCheckCircle 
 } from 'react-icons/fi'
 import { motion, AnimatePresence } from 'framer-motion'
+import Loader from '../components/Loader'
+import {
+  readCache,
+  writeCache,
+  clearCache,
+  removeBoard,
+  fetchBoards,
+  revalidateBoards,
+  subscribe as subscribeToBoards,
+} from '../lib/boardsCache'
 
 export default function Dashboard(){
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const logout = useAuthStore(s => s.logout)
   const setUser = useAuthStore(s => s.setUser)
-  const [boards, setBoards] = useState([])
+  
+  // Instant cache retrieval to eliminate delay when navigating back to dashboard.
+  // The board page keeps this cache patched while you are in a room, so the
+  // first paint after leaving already shows the up-to-date member counts.
+  const [boards, setBoards] = useState(() => readCache())
+  
   const [newBoardTitle, setNewBoardTitle] = useState('')
   const [loading, setLoading] = useState(false)
-  const [loadingBoards, setLoadingBoards] = useState(true)
+  const [loadingBoards, setLoadingBoards] = useState(() => readCache().length === 0)
   const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
@@ -43,21 +58,48 @@ export default function Dashboard(){
     }
   }
 
-  // Load boards on mount
+  // Load boards on mount and update cache in background (Stale-While-Revalidate).
+  // fetchBoards() shares a single in-flight request, so the refresh the board
+  // page kicked off on its way out is reused here instead of queueing a second
+  // round-trip behind it.
   React.useEffect(() => {
-    const fetchBoards = async () => {
-      try {
-        setLoadingBoards(true)
-        const res = await boardAPI.listBoards()
-        setBoards(res.data)
-      } catch (err) {
-        console.error('Failed to load boards:', err)
-        setError('Failed to load boards')
-      } finally {
-        setLoadingBoards(false)
-      }
+    let isMounted = true
+
+    // Keep in step with cache writes from anywhere else in the app.
+    const unsubscribe = subscribeToBoards((list) => {
+      if (isMounted) setBoards(list)
+    })
+
+    // First load always fetches; the listeners below go through
+    // revalidateBoards, which skips a request when the data is seconds old.
+    const load = (fetcher) => {
+      fetcher()
+        .then(() => { if (isMounted) setError('') })
+        .catch((err) => {
+          console.error('Failed to load boards:', err)
+          if (isMounted && readCache().length === 0) setError('Failed to load boards')
+        })
+        .finally(() => { if (isMounted) setLoadingBoards(false) })
     }
-    fetchBoards()
+
+    load(fetchBoards)
+
+    // Returning to the tab (or restoring from the back/forward cache) should
+    // show current data rather than whatever was on screen when you left.
+    const revalidate = () => load(revalidateBoards)
+    const onVisibility = () => { if (document.visibilityState === 'visible') revalidate() }
+    const onPageShow = (e) => { if (e.persisted) revalidate() }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', revalidate)
+    window.addEventListener('pageshow', onPageShow)
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', revalidate)
+      window.removeEventListener('pageshow', onPageShow)
+    }
   }, [])
 
   const handleCreateBoard = async (e) => {
@@ -70,7 +112,7 @@ export default function Dashboard(){
     setError('')
     try {
       const res = await boardAPI.createBoard(newBoardTitle)
-      setBoards([res.data, ...boards])
+      writeCache([res.data, ...readCache()])
       setNewBoardTitle('')
       setShowCreateModal(false)
       navigate(`/board/${res.data._id}`)
@@ -107,7 +149,7 @@ export default function Dashboard(){
     }
     try {
       await boardAPI.deleteBoard(boardId)
-      setBoards(boards.filter(b => b._id !== boardId))
+      removeBoard(boardId)
     } catch (err) {
       console.error('Delete board error:', err)
       setError(err.response?.data?.message || 'Failed to delete board')
@@ -115,6 +157,7 @@ export default function Dashboard(){
   }
 
   const handleLogout = () => {
+    clearCache()
     logout()
     navigate('/login')
   }
@@ -148,13 +191,21 @@ export default function Dashboard(){
               <FiWind className="w-6 h-6" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-black tracking-tight text-slate-900 uppercase leading-none">Flow<span className="text-indigo-600">board</span></span>
+              <span className="font-display text-xl tracking-tight text-slate-900 uppercase leading-none">Flow<span className="text-indigo-600">board</span></span>
               <span className="text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase mt-1">Idea Realtime Engine</span>
             </div>
           </div>
           <div className="flex items-center space-x-4">
             <button 
-              onClick={() => setShowProfileModal(!showProfileModal)}
+              onClick={() => {
+                // Re-seed from the store each time so the form never opens with
+                // values from before the last profile save.
+                if (!showProfileModal) {
+                  setEditName(user?.name || '')
+                  setEditAvatar(user?.avatar || '')
+                }
+                setShowProfileModal(!showProfileModal)
+              }}
               className="flex items-center space-x-3 bg-slate-100 px-5 py-2.5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all group cursor-pointer"
             >
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white text-xs font-black group-hover:rotate-12 transition-transform">
@@ -225,6 +276,7 @@ export default function Dashboard(){
                     disabled={isUpdatingProfile}
                     className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black shadow-2xl shadow-slate-200 hover:bg-indigo-600 transition-all disabled:opacity-50 active:scale-95"
                   >
+                    {isUpdatingProfile && <Loader inline size="xs" className="mr-2 align-middle" />}
                     {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
@@ -281,17 +333,20 @@ export default function Dashboard(){
 
           {/* Boards Grid */}
           <AnimatePresence mode="wait">
-            {loadingBoards ? (
+            {loadingBoards && boards.length === 0 ? (
               <motion.div 
                 key="loading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white p-20 rounded-[4rem] text-center border border-slate-100 shadow-2xl shadow-indigo-100/20 max-w-xl mx-auto flex flex-col items-center justify-center my-8"
               >
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-white/50 backdrop-blur-sm h-72 border border-slate-100 rounded-[3rem] animate-pulse" />
-                ))}
+                <Loader
+                  size="lg"
+                  theme="light"
+                  label="Syncing Your Workspaces..."
+                  sub="Flowing ideas in real-time"
+                />
               </motion.div>
             ) : boards.length === 0 ? (
               <motion.div 
@@ -518,6 +573,7 @@ export default function Dashboard(){
                     disabled={loading}
                     className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black shadow-2xl shadow-slate-200 hover:bg-indigo-600 transition-all disabled:opacity-50 active:scale-95"
                   >
+                    {loading && <Loader inline size="xs" className="mr-2 align-middle" />}
                     {loading ? 'Initializing...' : 'Launch Stream'}
                   </button>
                 </div>

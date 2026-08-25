@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { fabric } from 'fabric'
-import shallow from 'zustand/shallow'
+import { shallow } from 'zustand/shallow'
 import { useBoardStore } from '../stores/boardStore'
 import { useUIStore } from '../stores/uiStore'
 import { useDebouncedEmit } from '../hooks/useDebouncedEmit'
@@ -200,8 +200,15 @@ export default function FabricCanvas() {
       const objs = canvas.getActiveObjects()
       objs.forEach(o => { o.__backup = snapshot(o) })
     })
-        socket.on('op:create', (message) => {
+
+    // `socket` is scoped to the try/catch above, so referencing it here threw
+    // "socket is not defined" and took the whole canvas down on mount. Look the
+    // shared instance up instead, and skip the handler when there is none.
+    const opSocket = getSocket()
+    if (opSocket) {
+        opSocket.on('op:create', (message) => {
           const { payload, meta } = message || {}
+          if (!payload) return
           // ignore own messages
           const clientId = localStorage.getItem('cw_client_id')
           if (meta && meta.clientId && clientId && meta.clientId === clientId) return
@@ -273,6 +280,7 @@ export default function FabricCanvas() {
             }
           }
         })
+    }
 
     canvas.on('app:redo', ({ op }) => {
       if (!op) return
@@ -316,6 +324,7 @@ export default function FabricCanvas() {
             socket.off('draw-element')
             socket.off('update-element')
             socket.off('delete-element')
+            socket.off('op:create')
           }
         }
       } catch (e) {

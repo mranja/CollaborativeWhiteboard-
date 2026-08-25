@@ -31,10 +31,14 @@ export function connectSocket(token) {
 
   if (socket) {
     if (token && socket.auth?.token !== token) {
+      // A live connection keeps the handshake it was opened with, so simply
+      // reassigning auth left the server holding the previous user's identity.
+      // Drop the connection first and let it re-handshake with the new token.
       socket.auth = { token, clientId }
-      if (!socket.connected) {
-        socket.connect()
+      if (socket.connected) {
+        socket.disconnect()
       }
+      socket.connect()
     } else if (!socket.connected) {
       socket.connect()
     }
@@ -97,4 +101,20 @@ export function emitDebounced(event, payload) {
 
 export function getSocket() {
   return socket
+}
+
+/**
+ * Tear the shared connection down. Logging out previously left the socket
+ * connected with the old token, so the server still saw the user as present in
+ * whatever room they last opened.
+ */
+export function disconnectSocket() {
+  debouncers.forEach((fn) => fn.cancel?.())
+  debouncers.clear()
+
+  if (socket) {
+    socket.removeAllListeners()
+    socket.disconnect()
+    socket = null
+  }
 }

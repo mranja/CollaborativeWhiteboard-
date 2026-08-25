@@ -1,7 +1,61 @@
+const mongoose = require('mongoose');
 const Board = require('../models/Board')
 const Version = require('../models/Version');
 const jwt = require('jsonwebtoken');
 const { canEditBoard, getBoardRole } = require('../utils/boardAccess');
+const { getJwtSecret } = require('../utils/jwt');
+
+/**
+ * Live presence per room: roomName -> Map(userId -> { userId, name, sockets:Set })
+ *
+ * Without this, a socket that joined a busy room learned about the people
+ * already in it only when they happened to move their cursor, so the
+ * collaborator list and the "N Active" counter were wrong (and appeared to lag)
+ * on every join. Sockets are counted per user so a second tab, or React's
+ * StrictMode double-mount in development, does not fire a spurious
+ * `user-left` for someone who is still connected.
+ */
+const roomPresence = new Map();
+
+const listRoomMembers = (room, excludeUserId = null) => {
+  const members = roomPresence.get(room);
+  if (!members) return [];
+  return Array.from(members.values())
+    .filter((entry) => entry.userId !== excludeUserId)
+    .map((entry) => ({ userId: entry.userId, name: entry.name }));
+};
+
+/** Returns true when this is the user's first socket in the room. */
+const addPresence = (room, socketId, userId, name) => {
+  if (!roomPresence.has(room)) roomPresence.set(room, new Map());
+  const members = roomPresence.get(room);
+  const existing = members.get(userId);
+
+  if (existing) {
+    existing.sockets.add(socketId);
+    existing.name = name || existing.name;
+    return false;
+  }
+
+  members.set(userId, { userId, name, sockets: new Set([socketId]) });
+  return true;
+};
+
+/** Returns true when the user's last socket left the room. */
+const removePresence = (room, socketId, userId) => {
+  const members = roomPresence.get(room);
+  if (!members) return false;
+
+  const entry = members.get(userId);
+  if (!entry) return false;
+
+  entry.sockets.delete(socketId);
+  if (entry.sockets.size > 0) return false;
+
+  members.delete(userId);
+  if (members.size === 0) roomPresence.delete(room);
+  return true;
+};
 
 const allowedElementFields = [
   'type',
@@ -46,8 +100,7 @@ module.exports = (io) => {
     }
 
     try {
-      const secret = process.env.JWT_SECRET || 'supersecretkey123';
-      const decoded = jwt.verify(token, secret);
+      const decoded = jwt.verify(token, getJwtSecret());
       socket.userId = (decoded.userId || decoded.id)?.toString();
       socket.userName = decoded.name || 'Anonymous';
       socket.userEmail = decoded.email;
@@ -70,15 +123,27 @@ module.exports = (io) => {
     const userId = socket.userId;
     const name = socket.userName;
 
+    const exitRoom = (room) => {
+      if (!room) return;
+      const wasLast = removePresence(room, socket.id, userId);
+      socket.leave(room);
+      if (wasLast) socket.to(room).emit('user-left', { userId });
+    };
+
     socket.on('join-board', async ({ boardId } = {}, ack) => {
-      if (currentRoom) {
-        socket.to(currentRoom).emit('user-left', { userId });
-        socket.leave(currentRoom);
-      }
+      exitRoom(currentRoom);
       currentRoom = null;
       currentBoardId = null;
       userRole = null;
-      
+
+      // Reject malformed ids up front: findById would otherwise throw a
+      // CastError and surface as a confusing "Unable to join board".
+      if (!boardId || !mongoose.Types.ObjectId.isValid(boardId)) {
+        acknowledge(ack, { ok: false, message: 'Board not found' });
+        socket.emit('board-error', { message: 'Board not found' });
+        return;
+      }
+
       // Determine user role from board or auto-attach user
       try {
         let board = await Board.findById(boardId);
@@ -104,8 +169,19 @@ module.exports = (io) => {
         currentRoom = `board_${boardId}`;
         currentBoardId = boardId;
         socket.join(currentRoom);
-        socket.to(currentRoom).emit('user-joined', { userId, name });
-        acknowledge(ack, { ok: true, role: userRole });
+
+        const isFirstSocketForUser = addPresence(currentRoom, socket.id, userId, name);
+        const members = listRoomMembers(currentRoom, userId);
+
+        if (isFirstSocketForUser) {
+          socket.to(currentRoom).emit('user-joined', { userId, name });
+        }
+
+        // Seed the joiner with everyone already in the room so the
+        // collaborator list and active-user count are correct immediately
+        // instead of filling in as people move their cursors.
+        socket.emit('board-presence', { boardId, members });
+        acknowledge(ack, { ok: true, role: userRole, members });
       } catch (err) {
         console.error('Error fetching board role:', err);
         acknowledge(ack, { ok: false, message: 'Unable to join board' });
@@ -113,10 +189,11 @@ module.exports = (io) => {
       }
     });
 
-    socket.on('leave-board', ({ boardId }) => {
-      const room = `board_${boardId}`;
-      socket.to(room).emit('user-left', { userId });
-      socket.leave(room);
+    socket.on('leave-board', ({ boardId } = {}) => {
+      const room = boardId ? `board_${boardId}` : currentRoom;
+      if (!room) return;
+
+      exitRoom(room);
 
       if (currentRoom === room) {
         currentRoom = null;
@@ -262,7 +339,10 @@ module.exports = (io) => {
     });
 
     socket.on('disconnect', () => {
-      if (currentRoom) socket.to(currentRoom).emit('user-left', { userId });
+      exitRoom(currentRoom);
+      currentRoom = null;
+      currentBoardId = null;
+      userRole = null;
     });
   });
 };
