@@ -17,6 +17,7 @@ export default function Dashboard(){
   const [newBoardTitle, setNewBoardTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingBoards, setLoadingBoards] = useState(true)
+  const [error, setError] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
   const [joinInput, setJoinInput] = useState('')
