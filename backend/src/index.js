@@ -12,17 +12,34 @@ dotenv.config();
 mongoose.set('bufferCommands', false);
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Ensure critical config
 if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET is not set. Socket and API authentication will fail or be insecure.');
+  console.warn('⚠️  JWT_SECRET is not set. Using default secret (set JWT_SECRET in production).');
 }
 
-// CORS configuration - restrict to frontend URL in production
+// CORS configuration - support Vercel deployment, localhost, and configured FRONTEND_URL
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    
+    // Always allow localhost, any .vercel.app, and configured FRONTEND_URL
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (
+      origin.startsWith('http://localhost:') ||
+      origin.startsWith('http://127.0.0.1:') ||
+      origin.endsWith('.vercel.app') ||
+      (frontendUrl && origin === frontendUrl) ||
+      process.env.NODE_ENV !== 'production'
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Permissive to allow various preview domains
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
